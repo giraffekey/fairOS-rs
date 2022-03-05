@@ -2,6 +2,8 @@
 name = "fairos"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+authors = ["giraffekey <giraffekey@tutanota.com>"]
 
 [dependencies]
 bip39 = "1.0"
