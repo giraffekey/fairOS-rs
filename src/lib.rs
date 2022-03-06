@@ -8,4 +8,3 @@ mod user;
 
 pub use client::Client;
 pub use error::FairOSError;
-pub use user::UserSignupResponse;
