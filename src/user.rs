@@ -1,4 +1,4 @@
-use crate::{error::FairOSError, Client};
+use crate::{error::FairOSError, Client, MessageResponse};
 
 use std::collections::HashMap;
 
@@ -7,12 +7,6 @@ use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use serde::Deserialize;
 use serde_json::json;
-
-#[derive(Debug, Deserialize)]
-struct MessageResponse {
-    message: String,
-    code: u32,
-}
 
 #[derive(Debug, Deserialize)]
 struct UserSignupResponse {
@@ -44,6 +38,18 @@ struct UserExportResponse {
 #[derive(Debug, Deserialize)]
 struct UserStatResponse {
     user_name: String,
+    address: String,
+}
+
+#[derive(Debug)]
+pub struct UserExport {
+    username: String,
+    address: String,
+}
+
+#[derive(Debug)]
+pub struct UserInfo {
+    username: String,
     address: String,
 }
 
@@ -171,18 +177,24 @@ impl Client {
         Ok(())
     }
 
-    pub async fn export_user(&self, username: &str) -> Result<(String, String), FairOSError> {
+    pub async fn export_user(&self, username: &str) -> Result<UserExport, FairOSError> {
         let cookie = self.cookie(username).unwrap();
         let (res, _) = self
             .post::<UserExportResponse>("/user/export", Vec::new(), Some(cookie))
             .await?;
-        Ok((res.user_name, res.address))
+        Ok(UserExport {
+            username: res.user_name,
+            address: res.address,
+        })
     }
 
-    pub async fn user_info(&self, username: &str) -> Result<(String, String), FairOSError> {
+    pub async fn user_info(&self, username: &str) -> Result<UserInfo, FairOSError> {
         let cookie = self.cookie(username).unwrap();
         let res: UserStatResponse = self.get("/user/stat", HashMap::new(), Some(cookie)).await?;
-        Ok((res.user_name, res.address))
+        Ok(UserInfo {
+            username: res.user_name,
+            address: res.address,
+        })
     }
 }
 
@@ -253,6 +265,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_login_fails() {
+        let mut fairos = Client::new();
+        let username = random_username();
+        let password = random_password();
+        let res = fairos.signup(&username, &password, None).await;
+        assert!(res.is_ok());
+        let password = random_password();
+        let res = fairos.login(&username, &password).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
     async fn test_import_with_address() {
         let mut fairos = Client::new();
         let username = random_username();
@@ -291,15 +315,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_login_fails() {
+    async fn test_delete_user() {
         let mut fairos = Client::new();
         let username = random_username();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let password = random_password();
-        let res = fairos.login(&username, &password).await;
-        assert!(res.is_err());
+        let res = fairos.delete_user(&username, &password).await;
+        assert!(res.is_ok());
+        let res = fairos.user_exists(&username).await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), false);
     }
 
     #[tokio::test]
@@ -347,44 +373,30 @@ mod tests {
     #[tokio::test]
     async fn test_export_user() {
         let mut fairos = Client::new();
-        let username1 = random_username();
-        let password = random_password();
-        let res = fairos.signup(&username1, &password, None).await;
-        assert!(res.is_ok());
-        let (address1, _) = res.unwrap();
-        let res = fairos.export_user(&username1).await;
-        assert!(res.is_ok());
-        let (username2, address2) = res.unwrap();
-        assert_eq!(username1, username2);
-        assert_eq!(address1, address2);
-    }
-
-    #[tokio::test]
-    async fn test_delete_user() {
-        let mut fairos = Client::new();
         let username = random_username();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let res = fairos.delete_user(&username, &password).await;
+        let (address, _) = res.unwrap();
+        let res = fairos.export_user(&username).await;
         assert!(res.is_ok());
-        let res = fairos.user_exists(&username).await;
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap(), false);
+        let export = res.unwrap();
+        assert_eq!(export.username, username);
+        assert_eq!(export.address, address);
     }
 
     #[tokio::test]
     async fn test_user_info() {
         let mut fairos = Client::new();
-        let username1 = random_username();
+        let username = random_username();
         let password = random_password();
-        let res = fairos.signup(&username1, &password, None).await;
+        let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let (address1, _) = res.unwrap();
-        let res = fairos.user_info(&username1).await;
+        let (address, _) = res.unwrap();
+        let res = fairos.user_info(&username).await;
         assert!(res.is_ok());
-        let (username2, address2) = res.unwrap();
-        assert_eq!(username1, username2);
-        assert_eq!(address1, address2);
+        let info = res.unwrap();
+        assert_eq!(info.username, username);
+        assert_eq!(info.address, address);
     }
 }
