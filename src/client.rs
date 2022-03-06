@@ -105,11 +105,8 @@ impl Client {
             .map_err(|_| FairOSError::Error)?;
 
         let cookie = if let Some(cookie) = res.headers().get(SET_COOKIE) {
-        	let cookie_str = cookie.to_str().unwrap().to_string();
-            let mut split = cookie_str.split(";")
-            	.next()
-            	.unwrap()
-                .split("=");
+            let cookie_str = cookie.to_str().unwrap().to_string();
+            let mut split = cookie_str.split(";").next().unwrap().split("=");
             let name = split.next().unwrap();
             let value = split.next().unwrap();
             if name == "fairOS-dfs" {
@@ -154,18 +151,18 @@ impl Client {
     }
 
     pub(crate) fn cookie(&self, username: &str) -> Option<&str> {
-    	if let Some(cookie) = self.cookies.get(username) {
-    		Some(cookie.as_str())
-    	} else {
-    		None
-    	}
+        if let Some(cookie) = self.cookies.get(username) {
+            Some(cookie.as_str())
+        } else {
+            None
+        }
     }
 
     pub(crate) fn set_cookie(&mut self, username: &str, cookie: String) {
-    	self.cookies.insert(username.into(), cookie);
+        self.cookies.insert(username.into(), cookie);
     }
 
     pub(crate) fn remove_cookie(&mut self, username: &str) {
-    	self.cookies.remove(username);
+        self.cookies.remove(username);
     }
 }

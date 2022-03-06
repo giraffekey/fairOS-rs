@@ -37,13 +37,13 @@ struct UserIsLoggedInResponse {
 
 #[derive(Debug, Deserialize)]
 struct UserExportResponse {
-	user_name: String,
+    user_name: String,
     address: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct UserStatResponse {
-	user_name: String,
+    user_name: String,
     address: String,
 }
 
@@ -88,7 +88,7 @@ impl Client {
             .post::<MessageResponse>("/user/login", data, None)
             .await?;
         if res.code == 200 && res.message == "user logged-in successfully" {
-        	self.set_cookie(username, cookie.unwrap());
+            self.set_cookie(username, cookie.unwrap());
             Ok(())
         } else {
             Err(FairOSError::Error)
@@ -152,7 +152,7 @@ impl Client {
     }
 
     pub async fn logout(&mut self, username: &str) -> Result<(), FairOSError> {
-    	let cookie = self.cookie(username).unwrap();
+        let cookie = self.cookie(username).unwrap();
         let (res, _) = self
             .post::<MessageResponse>("/user/logout", Vec::new(), Some(cookie))
             .await?;
@@ -161,7 +161,7 @@ impl Client {
     }
 
     pub async fn export_user(&self, username: &str) -> Result<(String, String), FairOSError> {
-    	let cookie = self.cookie(username).unwrap();
+        let cookie = self.cookie(username).unwrap();
         let (res, _) = self
             .post::<UserExportResponse>("/user/export", Vec::new(), Some(cookie))
             .await?;
@@ -169,20 +169,18 @@ impl Client {
     }
 
     pub async fn delete_user(&mut self, username: &str, password: &str) -> Result<(), FairOSError> {
-        let data = json!({"password": password})
-        .to_string()
-        .as_bytes()
-        .to_vec();
-    	let cookie = self.cookie(username).unwrap();
-        let res: MessageResponse = self
-            .delete("/user/delete", data, cookie)
-            .await?;
+        let data = json!({ "password": password })
+            .to_string()
+            .as_bytes()
+            .to_vec();
+        let cookie = self.cookie(username).unwrap();
+        let res: MessageResponse = self.delete("/user/delete", data, cookie).await?;
         self.remove_cookie(username);
         Ok(())
     }
 
     pub async fn user_info(&self, username: &str) -> Result<(String, String), FairOSError> {
-    	let cookie = self.cookie(username).unwrap();
+        let cookie = self.cookie(username).unwrap();
         let res: UserStatResponse = self.get("/user/stat", HashMap::new(), Some(cookie)).await?;
         Ok((res.user_name, res.address))
     }
@@ -262,9 +260,11 @@ mod tests {
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
         let (address1, _) = res.unwrap();
-  		let res = fairos.delete_user(&username, &password).await;
-  		assert!(res.is_ok());
-        let res = fairos.import_with_address(&username, &password, &address1).await;
+        let res = fairos.delete_user(&username, &password).await;
+        assert!(res.is_ok());
+        let res = fairos
+            .import_with_address(&username, &password, &address1)
+            .await;
         assert!(res.is_ok());
         let address2 = res.unwrap();
         assert_eq!(address1, address2);
@@ -280,9 +280,11 @@ mod tests {
         let (address1, mnemonic) = res.unwrap();
         assert!(mnemonic.is_some());
         let mnemonic = mnemonic.unwrap();
-  		let res = fairos.delete_user(&username, &password).await;
-  		assert!(res.is_ok());
-        let res = fairos.import_with_mnemonic(&username, &password, &mnemonic).await;
+        let res = fairos.delete_user(&username, &password).await;
+        assert!(res.is_ok());
+        let res = fairos
+            .import_with_mnemonic(&username, &password, &mnemonic)
+            .await;
         assert!(res.is_ok());
         let address2 = res.unwrap();
         assert_eq!(address1, address2);
