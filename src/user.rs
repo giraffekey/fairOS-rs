@@ -137,7 +137,18 @@ impl Client {
         Ok(res.address)
     }
 
-    pub async fn username_exists(&self, username: &str) -> Result<bool, FairOSError> {
+    pub async fn delete_user(&mut self, username: &str, password: &str) -> Result<(), FairOSError> {
+        let data = json!({ "password": password })
+            .to_string()
+            .as_bytes()
+            .to_vec();
+        let cookie = self.cookie(username).unwrap();
+        let res: MessageResponse = self.delete("/user/delete", data, cookie).await?;
+        self.remove_cookie(username);
+        Ok(())
+    }
+
+    pub async fn user_exists(&self, username: &str) -> Result<bool, FairOSError> {
         let mut query = HashMap::new();
         query.insert("user_name", username);
         let res: UserPresentResponse = self.get("/user/present", query, None).await?;
@@ -166,17 +177,6 @@ impl Client {
             .post::<UserExportResponse>("/user/export", Vec::new(), Some(cookie))
             .await?;
         Ok((res.user_name, res.address))
-    }
-
-    pub async fn delete_user(&mut self, username: &str, password: &str) -> Result<(), FairOSError> {
-        let data = json!({ "password": password })
-            .to_string()
-            .as_bytes()
-            .to_vec();
-        let cookie = self.cookie(username).unwrap();
-        let res: MessageResponse = self.delete("/user/delete", data, cookie).await?;
-        self.remove_cookie(username);
-        Ok(())
     }
 
     pub async fn user_info(&self, username: &str) -> Result<(String, String), FairOSError> {
@@ -303,17 +303,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_username_exists() {
+    async fn test_user_exists() {
         let mut fairos = Client::new();
         let username = random_username();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let res = fairos.username_exists(&username).await;
+        let res = fairos.user_exists(&username).await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), true);
         let username = random_username();
-        let res = fairos.username_exists(&username).await;
+        let res = fairos.user_exists(&username).await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), false);
     }
@@ -368,7 +368,7 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.delete_user(&username, &password).await;
         assert!(res.is_ok());
-        let res = fairos.username_exists(&username).await;
+        let res = fairos.user_exists(&username).await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), false);
     }
