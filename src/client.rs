@@ -4,12 +4,23 @@ use core::{str::FromStr, time::Duration};
 use std::collections::HashMap;
 
 use hyper::header::{CONTENT_TYPE, COOKIE, SET_COOKIE};
-use hyper::{client::HttpConnector, Body, Request, Uri};
+use hyper::{client::HttpConnector, Body, Request, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Deserialize};
 
 const IDLE_TIMEOUT: u64 = 6000;
 const MAX_IDLE_PER_HOST: usize = 20;
+
+#[derive(Debug, Deserialize)]
+pub struct MessageResponse {
+    pub message: String,
+    pub code: u32,
+}
+
+fn is_status_ok(status: StatusCode) -> bool {
+    let status = status.as_u16();
+    status >= 200 && status < 300
+}
 
 pub struct Client {
     url: String,
@@ -75,10 +86,17 @@ impl Client {
             .request(req)
             .await
             .map_err(|_| FairOSError::Error)?;
+        let status_ok = is_status_ok(res.status());
         let buf = hyper::body::to_bytes(res)
             .await
             .map_err(|_| FairOSError::Error)?;
-        serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)
+
+        if status_ok {
+            serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)
+        } else {
+            let res: MessageResponse = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
+            Err(FairOSError::Message(res.message))
+        }
     }
 
     pub(crate) async fn post<T: DeserializeOwned>(
@@ -118,12 +136,18 @@ impl Client {
             None
         };
 
+        let status_ok = is_status_ok(res.status());
         let buf = hyper::body::to_bytes(res)
             .await
             .map_err(|_| FairOSError::Error)?;
-        let des = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
 
-        Ok((des, cookie))
+        if status_ok {
+            let des = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
+            Ok((des, cookie))
+        } else {
+            let res: MessageResponse = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
+            Err(FairOSError::Message(res.message))
+        }
     }
 
     pub(crate) async fn delete<T: DeserializeOwned>(
@@ -139,15 +163,23 @@ impl Client {
             .header(COOKIE, format!("fairOS-dfs={}", cookie))
             .body(Body::from(body))
             .unwrap();
+
         let res = self
             .http_client
             .request(req)
             .await
             .map_err(|_| FairOSError::Error)?;
+        let status_ok = is_status_ok(res.status());
         let buf = hyper::body::to_bytes(res)
             .await
             .map_err(|_| FairOSError::Error)?;
-        serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)
+
+        if status_ok {
+            serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)
+        } else {
+            let res: MessageResponse = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
+            Err(FairOSError::Message(res.message))
+        }
     }
 
     pub(crate) fn cookie(&self, username: &str) -> Option<&str> {

@@ -1,4 +1,4 @@
-use crate::{error::FairOSError, Client, MessageResponse};
+use crate::{client::MessageResponse, error::FairOSError, Client};
 
 use std::collections::HashMap;
 
@@ -43,14 +43,14 @@ struct UserStatResponse {
 
 #[derive(Debug)]
 pub struct UserExport {
-    username: String,
-    address: String,
+    pub username: String,
+    pub address: String,
 }
 
 #[derive(Debug)]
 pub struct UserInfo {
-    username: String,
-    address: String,
+    pub username: String,
+    pub address: String,
 }
 
 impl Client {
