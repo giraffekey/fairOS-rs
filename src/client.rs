@@ -182,6 +182,79 @@ impl Client {
         }
     }
 
+    pub(crate) async fn upload_multipart<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        boundary: &str,
+        cookie: &str,
+        compression: Option<&str>,
+    ) -> Result<T, RequestError> {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri(self.make_uri(path, HashMap::new()))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data;boundary={}", boundary),
+            )
+            .header(COOKIE, format!("fairOS-dfs={}", cookie))
+            .body(Body::from(body))
+            .unwrap();
+        if let Some(compression) = compression {
+            req.headers_mut()
+                .insert("fairOS-dfs-Compression", compression.parse().unwrap());
+        }
+
+        let res = self
+            .http_client
+            .request(req)
+            .await
+            .map_err(|_| RequestError::CouldNotConnect)?;
+        let status_ok = is_status_ok(res.status());
+        let buf = hyper::body::to_bytes(res).await.unwrap();
+
+        if status_ok {
+            Ok(serde_json::from_slice(&buf).unwrap())
+        } else {
+            let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            Err(RequestError::Message(res.message))
+        }
+    }
+
+    pub(crate) async fn download_multipart(
+        &self,
+        path: &str,
+        body: Vec<u8>,
+        boundary: &str,
+        cookie: &str,
+    ) -> Result<Vec<u8>, RequestError> {
+        let req = Request::builder()
+            .method("POST")
+            .uri(self.make_uri(path, HashMap::new()))
+            .header(
+                CONTENT_TYPE,
+                format!("multipart/form-data;boundary={}", boundary),
+            )
+            .header(COOKIE, format!("fairOS-dfs={}", cookie))
+            .body(Body::from(body))
+            .unwrap();
+
+        let res = self
+            .http_client
+            .request(req)
+            .await
+            .map_err(|_| RequestError::CouldNotConnect)?;
+        let status_ok = is_status_ok(res.status());
+        let buf = hyper::body::to_bytes(res).await.unwrap();
+
+        if status_ok {
+            Ok(buf.to_vec())
+        } else {
+            let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            Err(RequestError::Message(res.message))
+        }
+    }
+
     pub(crate) fn cookie(&self, username: &str) -> Option<&str> {
         if let Some(cookie) = self.cookies.get(username) {
             Some(cookie.as_str())
