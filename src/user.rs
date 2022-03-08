@@ -1,4 +1,7 @@
-use crate::{client::MessageResponse, error::FairOSError, Client};
+use crate::{
+    client::{MessageResponse, RequestError},
+    Client, FairOSError, FairOSUserError,
+};
 
 use std::collections::HashMap;
 
@@ -77,7 +80,16 @@ impl Client {
         .to_vec();
         let (res, cookie) = self
             .post::<UserSignupResponse>("/user/signup", data, None)
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(msg) => match msg.as_str() {
+                    "user signup: user name already present" => {
+                        FairOSError::User(FairOSUserError::UsernameAlreadyExists)
+                    }
+                    _ => FairOSError::User(FairOSUserError::Error),
+                },
+            })?;
         self.set_cookie(username, cookie.unwrap());
         Ok((res.address, res.mnemonic))
     }
@@ -90,15 +102,23 @@ impl Client {
         .to_string()
         .as_bytes()
         .to_vec();
-        let (res, cookie) = self
+        let (_, cookie) = self
             .post::<MessageResponse>("/user/login", data, None)
-            .await?;
-        if res.code == 200 && res.message == "user logged-in successfully" {
-            self.set_cookie(username, cookie.unwrap());
-            Ok(())
-        } else {
-            Err(FairOSError::Error)
-        }
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(msg) => match msg.as_str() {
+                    "user login: invalid user name" => {
+                        FairOSError::User(FairOSUserError::InvalidUsername)
+                    }
+                    "user login: invalid password" => {
+                        FairOSError::User(FairOSUserError::InvalidPassword)
+                    }
+                    _ => FairOSError::User(FairOSUserError::Error),
+                },
+            })?;
+        self.set_cookie(username, cookie.unwrap());
+        Ok(())
     }
 
     pub async fn import_with_address(
@@ -117,7 +137,11 @@ impl Client {
         .to_vec();
         let (res, cookie) = self
             .post::<UserImportResponse>("/user/import", data, None)
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+            })?;
         self.set_cookie(username, cookie.unwrap());
         Ok(res.address)
     }
@@ -138,7 +162,11 @@ impl Client {
         .to_vec();
         let (res, cookie) = self
             .post::<UserImportResponse>("/user/import", data, None)
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+            })?;
         self.set_cookie(username, cookie.unwrap());
         Ok(res.address)
     }
@@ -149,7 +177,13 @@ impl Client {
             .as_bytes()
             .to_vec();
         let cookie = self.cookie(username).unwrap();
-        let res: MessageResponse = self.delete("/user/delete", data, cookie).await?;
+        let _: MessageResponse =
+            self.delete("/user/delete", data, cookie)
+                .await
+                .map_err(|err| match err {
+                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                    RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+                })?;
         self.remove_cookie(username);
         Ok(())
     }
@@ -157,22 +191,38 @@ impl Client {
     pub async fn user_exists(&self, username: &str) -> Result<bool, FairOSError> {
         let mut query = HashMap::new();
         query.insert("user_name", username);
-        let res: UserPresentResponse = self.get("/user/present", query, None).await?;
+        let res: UserPresentResponse =
+            self.get("/user/present", query, None)
+                .await
+                .map_err(|err| match err {
+                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                    RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+                })?;
         Ok(res.present)
     }
 
     pub async fn is_logged_in(&self, username: &str) -> Result<bool, FairOSError> {
         let mut query = HashMap::new();
         query.insert("user_name", username);
-        let res: UserIsLoggedInResponse = self.get("/user/isloggedin", query, None).await?;
+        let res: UserIsLoggedInResponse =
+            self.get("/user/isloggedin", query, None)
+                .await
+                .map_err(|err| match err {
+                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                    RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+                })?;
         Ok(res.loggedin)
     }
 
     pub async fn logout(&mut self, username: &str) -> Result<(), FairOSError> {
         let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
+        let _ = self
             .post::<MessageResponse>("/user/logout", Vec::new(), Some(cookie))
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+            })?;
         self.remove_cookie(username);
         Ok(())
     }
@@ -181,7 +231,11 @@ impl Client {
         let cookie = self.cookie(username).unwrap();
         let (res, _) = self
             .post::<UserExportResponse>("/user/export", Vec::new(), Some(cookie))
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+            })?;
         Ok(UserExport {
             username: res.user_name,
             address: res.address,
@@ -190,7 +244,13 @@ impl Client {
 
     pub async fn user_info(&self, username: &str) -> Result<UserInfo, FairOSError> {
         let cookie = self.cookie(username).unwrap();
-        let res: UserStatResponse = self.get("/user/stat", HashMap::new(), Some(cookie)).await?;
+        let res: UserStatResponse = self
+            .get("/user/stat", HashMap::new(), Some(cookie))
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::User(FairOSUserError::Error),
+            })?;
         Ok(UserInfo {
             username: res.user_name,
             address: res.address,
@@ -200,13 +260,13 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::Client;
+    use super::{Client, FairOSError, FairOSUserError};
     use rand::{
         distributions::{Alphanumeric, Uniform},
         thread_rng, Rng,
     };
 
-    fn random_username() -> String {
+    fn random_name() -> String {
         thread_rng()
             .sample_iter(Alphanumeric)
             .take(8)
@@ -229,9 +289,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_signup_with_mnemonic() {
+    async fn test_signup_with_mnemonic_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let mnemonic = Client::generate_mnemonic();
         let res = fairos.signup(&username, &password, Some(&mnemonic)).await;
@@ -242,9 +302,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_signup_without_mnemonic() {
+    async fn test_signup_without_mnemonic_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -254,9 +314,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_signup_username_already_exists_fails() {
+        let mut fairos = Client::new();
+        let username = random_name();
+        let password = random_password();
+        let res = fairos.signup(&username, &password, None).await;
+        assert!(res.is_ok());
+        let password = random_password();
+        let res = fairos.signup(&username, &password, None).await;
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err(),
+            FairOSError::User(FairOSUserError::UsernameAlreadyExists),
+        );
+    }
+
+    #[tokio::test]
     async fn test_login_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -265,21 +341,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_login_fails() {
+    async fn test_login_invalid_username_fails() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
+        let password = random_password();
+        let res = fairos.signup(&username, &password, None).await;
+        assert!(res.is_ok());
+        let username = random_name();
+        let res = fairos.login(&username, &password).await;
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err(),
+            FairOSError::User(FairOSUserError::InvalidUsername),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_login_invalid_password_fails() {
+        let mut fairos = Client::new();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
         let password = random_password();
         let res = fairos.login(&username, &password).await;
         assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err(),
+            FairOSError::User(FairOSUserError::InvalidPassword),
+        );
     }
 
     #[tokio::test]
-    async fn test_import_with_address() {
+    async fn test_import_with_address_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -295,9 +391,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_import_with_mnemonic() {
+    async fn test_import_with_mnemonic_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -315,9 +411,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_user() {
+    async fn test_delete_user_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -329,25 +425,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_user_exists() {
+    async fn test_user_exists_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
         let res = fairos.user_exists(&username).await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), true);
-        let username = random_username();
+        let username = random_name();
         let res = fairos.user_exists(&username).await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), false);
     }
 
     #[tokio::test]
-    async fn test_is_logged_in() {
+    async fn test_is_logged_in_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -357,9 +453,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_logout() {
+    async fn test_logout_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -371,9 +467,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_export_user() {
+    async fn test_export_user_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
@@ -386,9 +482,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_user_info() {
+    async fn test_user_info_succeeds() {
         let mut fairos = Client::new();
-        let username = random_username();
+        let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());

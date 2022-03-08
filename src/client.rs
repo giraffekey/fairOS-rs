@@ -11,8 +11,14 @@ use serde::{de::DeserializeOwned, Deserialize};
 const IDLE_TIMEOUT: u64 = 6000;
 const MAX_IDLE_PER_HOST: usize = 20;
 
+#[derive(Debug)]
+pub(crate) enum RequestError {
+    CouldNotConnect,
+    Message(String),
+}
+
 #[derive(Debug, Deserialize)]
-pub struct MessageResponse {
+pub(crate) struct MessageResponse {
     pub message: String,
     pub code: u32,
 }
@@ -70,7 +76,7 @@ impl Client {
         path: &str,
         query: HashMap<&str, &str>,
         cookie: Option<&str>,
-    ) -> Result<T, FairOSError> {
+    ) -> Result<T, RequestError> {
         let mut req = Request::builder()
             .method("GET")
             .uri(self.make_uri(path, query))
@@ -85,17 +91,15 @@ impl Client {
             .http_client
             .request(req)
             .await
-            .map_err(|_| FairOSError::Error)?;
+            .map_err(|_| RequestError::CouldNotConnect)?;
         let status_ok = is_status_ok(res.status());
-        let buf = hyper::body::to_bytes(res)
-            .await
-            .map_err(|_| FairOSError::Error)?;
+        let buf = hyper::body::to_bytes(res).await.unwrap();
 
         if status_ok {
-            serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)
+            Ok(serde_json::from_slice(&buf).unwrap())
         } else {
-            let res: MessageResponse = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
-            Err(FairOSError::Message(res.message))
+            let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            Err(RequestError::Message(res.message))
         }
     }
 
@@ -104,7 +108,7 @@ impl Client {
         path: &str,
         body: Vec<u8>,
         cookie: Option<&str>,
-    ) -> Result<(T, Option<String>), FairOSError> {
+    ) -> Result<(T, Option<String>), RequestError> {
         let mut req = Request::builder()
             .method("POST")
             .uri(self.make_uri(path, HashMap::new()))
@@ -120,7 +124,7 @@ impl Client {
             .http_client
             .request(req)
             .await
-            .map_err(|_| FairOSError::Error)?;
+            .map_err(|_| RequestError::CouldNotConnect)?;
 
         let cookie = if let Some(cookie) = res.headers().get(SET_COOKIE) {
             let cookie_str = cookie.to_str().unwrap().to_string();
@@ -137,16 +141,14 @@ impl Client {
         };
 
         let status_ok = is_status_ok(res.status());
-        let buf = hyper::body::to_bytes(res)
-            .await
-            .map_err(|_| FairOSError::Error)?;
+        let buf = hyper::body::to_bytes(res).await.unwrap();
 
         if status_ok {
-            let des = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
+            let des = serde_json::from_slice(&buf).unwrap();
             Ok((des, cookie))
         } else {
-            let res: MessageResponse = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
-            Err(FairOSError::Message(res.message))
+            let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            Err(RequestError::Message(res.message))
         }
     }
 
@@ -155,7 +157,7 @@ impl Client {
         path: &str,
         body: Vec<u8>,
         cookie: &str,
-    ) -> Result<T, FairOSError> {
+    ) -> Result<T, RequestError> {
         let req = Request::builder()
             .method("DELETE")
             .uri(self.make_uri(path, HashMap::new()))
@@ -168,17 +170,15 @@ impl Client {
             .http_client
             .request(req)
             .await
-            .map_err(|_| FairOSError::Error)?;
+            .map_err(|_| RequestError::CouldNotConnect)?;
         let status_ok = is_status_ok(res.status());
-        let buf = hyper::body::to_bytes(res)
-            .await
-            .map_err(|_| FairOSError::Error)?;
+        let buf = hyper::body::to_bytes(res).await.unwrap();
 
         if status_ok {
-            serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)
+            Ok(serde_json::from_slice(&buf).unwrap())
         } else {
-            let res: MessageResponse = serde_json::from_slice(&buf).map_err(|_| FairOSError::Error)?;
-            Err(FairOSError::Message(res.message))
+            let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            Err(RequestError::Message(res.message))
         }
     }
 

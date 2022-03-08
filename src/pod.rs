@@ -1,4 +1,7 @@
-use crate::{client::MessageResponse, error::FairOSError, Client};
+use crate::{
+    client::{MessageResponse, RequestError},
+    Client, FairOSError, FairOSPodError,
+};
 
 use std::collections::HashMap;
 
@@ -66,9 +69,13 @@ impl Client {
         .as_bytes()
         .to_vec();
         let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
+        let _ = self
             .post::<MessageResponse>("/pod/new", data, Some(cookie))
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(())
     }
 
@@ -86,27 +93,39 @@ impl Client {
         .as_bytes()
         .to_vec();
         let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
+        let _ = self
             .post::<MessageResponse>("/pod/open", data, Some(cookie))
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(())
     }
 
     pub async fn sync_pod(&self, username: &str, name: &str) -> Result<(), FairOSError> {
         let data = json!({ "pod_name": name }).to_string().as_bytes().to_vec();
         let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
+        let _ = self
             .post::<MessageResponse>("/pod/sync", data, Some(cookie))
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(())
     }
 
     pub async fn close_pod(&self, username: &str, name: &str) -> Result<(), FairOSError> {
         let data = json!({ "pod_name": name }).to_string().as_bytes().to_vec();
         let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
+        let _ = self
             .post::<MessageResponse>("/pod/close", data, Some(cookie))
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(())
     }
 
@@ -126,7 +145,11 @@ impl Client {
         let cookie = self.cookie(username).unwrap();
         let (res, _) = self
             .post::<PodShareResponse>("/pod/share", data, Some(cookie))
-            .await?;
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(res.pod_sharing_reference)
     }
 
@@ -144,7 +167,13 @@ impl Client {
         .as_bytes()
         .to_vec();
         let cookie = self.cookie(username).unwrap();
-        let res: MessageResponse = self.delete("/pod/delete", data, cookie).await?;
+        let _: MessageResponse = self
+            .delete("/pod/delete", data, cookie)
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(())
     }
 
@@ -152,7 +181,13 @@ impl Client {
         let mut query = HashMap::new();
         query.insert("pod_name", name);
         let cookie = self.cookie(username).unwrap();
-        let res: PodPresentResponse = self.get("/pod/present", query, Some(cookie)).await?;
+        let res: PodPresentResponse = self
+            .get("/pod/present", query, Some(cookie))
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(res.present)
     }
 
@@ -161,7 +196,13 @@ impl Client {
         username: &str,
     ) -> Result<(Vec<String>, Vec<String>), FairOSError> {
         let cookie = self.cookie(username).unwrap();
-        let res: PodListResponse = self.get("/pod/ls", HashMap::new(), Some(cookie)).await?;
+        let res: PodListResponse = self
+            .get("/pod/ls", HashMap::new(), Some(cookie))
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok((res.pod_name, res.shared_pod_name))
     }
 
@@ -169,7 +210,13 @@ impl Client {
         let mut query = HashMap::new();
         query.insert("pod_name", name);
         let cookie = self.cookie(username).unwrap();
-        let res: PodStatResponse = self.get("/pod/stat", query, Some(cookie)).await?;
+        let res: PodStatResponse =
+            self.get("/pod/stat", query, Some(cookie))
+                .await
+                .map_err(|err| match err {
+                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                    RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+                })?;
         Ok(PodInfo {
             name: res.pod_name,
             address: res.address,
@@ -184,7 +231,13 @@ impl Client {
         let mut query = HashMap::new();
         query.insert("sharing_ref", reference);
         let cookie = self.cookie(username).unwrap();
-        let res: MessageResponse = self.get("/pod/receive", query, Some(cookie)).await?;
+        let _: MessageResponse = self
+            .get("/pod/receive", query, Some(cookie))
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+            })?;
         Ok(())
     }
 
@@ -196,7 +249,13 @@ impl Client {
         let mut query = HashMap::new();
         query.insert("sharing_ref", reference);
         let cookie = self.cookie(username).unwrap();
-        let res: PodReceiveInfoResponse = self.get("/pod/receiveinfo", query, Some(cookie)).await?;
+        let res: PodReceiveInfoResponse = self
+            .get("/pod/receiveinfo", query, Some(cookie))
+            .await
+            .map_err(|err| match err {
+            RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+            RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+        })?;
         Ok(SharedPodInfo {
             name: res.pod_name,
             address: res.pod_address,
@@ -232,7 +291,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_pod() {
+    async fn test_create_pod_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -244,7 +303,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_open_pod() {
+    async fn test_open_pod_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -261,7 +320,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sync_pod() {
+    async fn test_sync_pod_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -275,7 +334,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_close_pod() {
+    async fn test_close_pod_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -289,7 +348,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_share_pod() {
+    async fn test_share_pod_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -303,7 +362,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_pod() {
+    async fn test_delete_pod_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -320,7 +379,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pod_exists() {
+    async fn test_pod_exists_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -339,7 +398,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_list_pods() {
+    async fn test_list_pods_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -359,7 +418,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_pod_info() {
+    async fn test_pod_info_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -375,7 +434,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_receive_shared_pod() {
+    async fn test_receive_shared_pod_succeeds() {
         let mut fairos = Client::new();
 
         let username = random_name();
@@ -398,7 +457,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_shared_pod_info() {
+    async fn test_shared_pod_info_succeeds() {
         let mut fairos = Client::new();
 
         let username1 = random_name();
