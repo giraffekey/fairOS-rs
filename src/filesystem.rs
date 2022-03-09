@@ -850,7 +850,9 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let res = fairos.signup(&random_name(), &random_password(), None).await;
+        let res = fairos
+            .signup(&random_name(), &random_password(), None)
+            .await;
         assert!(res.is_ok());
         let (receiver, _) = res.unwrap();
         let pod_name = random_name();
@@ -871,7 +873,9 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.share_file(&username, &pod_name, "/Documents/hello.txt", &receiver).await;
+        let res = fairos
+            .share_file(&username, &pod_name, "/Documents/hello.txt", &receiver)
+            .await;
         assert!(res.is_ok());
     }
 
@@ -900,7 +904,9 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.rm(&username, &pod_name, "/Documents/hello.txt").await;
+        let res = fairos
+            .rm(&username, &pod_name, "/Documents/hello.txt")
+            .await;
         assert!(res.is_ok());
     }
 
@@ -929,7 +935,9 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.file_info(&username, &pod_name, "/Documents/hello.txt").await;
+        let res = fairos
+            .file_info(&username, &pod_name, "/Documents/hello.txt")
+            .await;
         assert!(res.is_ok());
         let info = res.unwrap();
         assert_eq!(info.pod_name, pod_name);
@@ -973,7 +981,9 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.share_file(&username1, &pod_name, "/Documents/hello.txt", &receiver).await;
+        let res = fairos
+            .share_file(&username1, &pod_name, "/Documents/hello.txt", &receiver)
+            .await;
         assert!(res.is_ok());
         let reference = res.unwrap();
 
@@ -982,7 +992,9 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.mkdir(&username2, &pod_name, "/Shared").await;
         assert!(res.is_ok());
-        let res = fairos.receive_shared_file(&username2, &pod_name, &reference, "/Shared").await;
+        let res = fairos
+            .receive_shared_file(&username2, &pod_name, &reference, "/Shared")
+            .await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), "/Shared/hello.txt");
     }
@@ -1019,7 +1031,9 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.share_file(&username1, &pod_name1, "/Documents/hello.txt", &receiver).await;
+        let res = fairos
+            .share_file(&username1, &pod_name1, "/Documents/hello.txt", &receiver)
+            .await;
         assert!(res.is_ok());
         let reference = res.unwrap();
 
@@ -1028,9 +1042,13 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.mkdir(&username2, &pod_name2, "/Shared").await;
         assert!(res.is_ok());
-        let res = fairos.receive_shared_file(&username2, &pod_name2, &reference, "/Shared").await;
+        let res = fairos
+            .receive_shared_file(&username2, &pod_name2, &reference, "/Shared")
+            .await;
         assert!(res.is_ok());
-        let res = fairos.shared_file_info(&username2, &pod_name2, &reference).await;
+        let res = fairos
+            .shared_file_info(&username2, &pod_name2, &reference)
+            .await;
         assert!(res.is_ok());
         let info = res.unwrap();
         assert_eq!(info.pod_name, pod_name1);

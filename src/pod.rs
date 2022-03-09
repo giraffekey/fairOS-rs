@@ -253,9 +253,9 @@ impl Client {
             .get("/pod/receiveinfo", query, Some(cookie))
             .await
             .map_err(|err| match err {
-                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
-                RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
-            })?;
+            RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+            RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
+        })?;
         Ok(SharedPodInfo {
             name: res.pod_name,
             address: res.pod_address,
