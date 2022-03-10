@@ -3,6 +3,7 @@ use crate::error::FairOSError;
 use core::{str::FromStr, time::Duration};
 use std::collections::HashMap;
 
+use bytes::Bytes;
 use hyper::header::{CONTENT_TYPE, COOKIE, SET_COOKIE};
 use hyper::{client::HttpConnector, Body, Request, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
@@ -52,6 +53,33 @@ impl Client {
             url,
             http_client,
             cookies: HashMap::new(),
+        }
+    }
+
+    pub fn cookie(&self, username: &str) -> Option<&str> {
+        if let Some(cookie) = self.cookies.get(username) {
+            Some(cookie.as_str())
+        } else {
+            None
+        }
+    }
+
+    pub fn set_cookie(&mut self, username: &str, cookie: String) {
+        self.cookies.insert(username.into(), cookie);
+    }
+
+    pub fn remove_cookie(&mut self, username: &str) {
+        self.cookies.remove(username);
+    }
+
+    pub fn consume_cookie(&mut self, username: &str) -> Option<String> {
+        match self.cookie(username) {
+            Some(cookie) => {
+                let cookie = cookie.to_string();
+                self.remove_cookie(username);
+                Some(cookie)
+            },
+            None => None,
         }
     }
 
@@ -227,7 +255,7 @@ impl Client {
         body: Vec<u8>,
         boundary: &str,
         cookie: &str,
-    ) -> Result<Vec<u8>, RequestError> {
+    ) -> Result<Bytes, RequestError> {
         let req = Request::builder()
             .method("POST")
             .uri(self.make_uri(path, HashMap::new()))
@@ -248,26 +276,10 @@ impl Client {
         let buf = hyper::body::to_bytes(res).await.unwrap();
 
         if status_ok {
-            Ok(buf.to_vec())
+            Ok(buf)
         } else {
             let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
             Err(RequestError::Message(res.message))
         }
-    }
-
-    pub(crate) fn cookie(&self, username: &str) -> Option<&str> {
-        if let Some(cookie) = self.cookies.get(username) {
-            Some(cookie.as_str())
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn set_cookie(&mut self, username: &str, cookie: String) {
-        self.cookies.insert(username.into(), cookie);
-    }
-
-    pub(crate) fn remove_cookie(&mut self, username: &str) {
-        self.cookies.remove(username);
     }
 }

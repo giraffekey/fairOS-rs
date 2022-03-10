@@ -4,8 +4,9 @@ use crate::{
     Client,
 };
 
-use std::{collections::HashMap, io::Read, path::Path};
+use std::{collections::HashMap, fs, io::Read, path::Path};
 
+use bytes::Bytes;
 use mime::Mime;
 use multipart::client::lazy::Multipart;
 use serde::Deserialize;
@@ -374,7 +375,7 @@ impl Client {
         username: &str,
         pod_name: &str,
         dir: &str,
-        path: P,
+        local_path: P,
         block_size: &str,
         compression: Option<Compression>,
     ) -> Result<String, FairOSError> {
@@ -382,7 +383,7 @@ impl Client {
         multipart.add_text("pod_name", pod_name);
         multipart.add_text("dir_path", dir);
         multipart.add_text("block_size", block_size);
-        multipart.add_file("files", path.as_ref());
+        multipart.add_file("files", local_path.as_ref());
         let mut prepared = multipart.prepare().unwrap();
         let boundary = prepared.boundary().to_string();
         let mut body = Vec::new();
@@ -407,12 +408,12 @@ impl Client {
         Ok(res.file_name)
     }
 
-    pub async fn download(
+    pub async fn download_buffer(
         &self,
         username: &str,
         pod_name: &str,
         path: &str,
-    ) -> Result<Vec<u8>, FairOSError> {
+    ) -> Result<Bytes, FairOSError> {
         let mut multipart = Multipart::new();
         multipart.add_text("pod_name", pod_name);
         multipart.add_text("file_path", path);
@@ -422,7 +423,7 @@ impl Client {
         prepared.read_to_end(&mut body).unwrap();
 
         let cookie = self.cookie(username).unwrap();
-        let data: Vec<u8> = self
+        let buf = self
             .download_multipart("/file/download", body, boundary.as_str(), cookie)
             .await
             .map_err(|err| {
@@ -434,7 +435,40 @@ impl Client {
                     }
                 }
             })?;
-        Ok(data)
+        Ok(buf)
+    }
+
+    pub async fn download_file<P: AsRef<Path>>(
+        &self,
+        username: &str,
+        pod_name: &str,
+        path: &str,
+        local_path: P,
+    ) -> Result<(), FairOSError> {
+        let mut multipart = Multipart::new();
+        multipart.add_text("pod_name", pod_name);
+        multipart.add_text("file_path", path);
+        let mut prepared = multipart.prepare().unwrap();
+        let boundary = prepared.boundary().to_string();
+        let mut body = Vec::new();
+        prepared.read_to_end(&mut body).unwrap();
+
+        let cookie = self.cookie(username).unwrap();
+        let buf = self
+            .download_multipart("/file/download", body, boundary.as_str(), cookie)
+            .await
+            .map_err(|err| {
+                println!("{:?}", err);
+                match err {
+                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                    RequestError::Message(_) => {
+                        FairOSError::FileSystem(FairOSFileSystemError::Error)
+                    }
+                }
+            })?;
+        fs::write(local_path, buf);
+
+        Ok(())
     }
 
     pub async fn share_file(
@@ -609,6 +643,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{Client, Compression};
+    use bytes::Buf;
     use rand::{
         distributions::{Alphanumeric, Uniform},
         thread_rng, Rng,
@@ -795,24 +830,24 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
         assert!(res.is_ok());
-        fs::write("hello.txt", "hello world").unwrap();
+        fs::write("upload.txt", "hello world").unwrap();
         let res = fairos
             .upload_file(
                 &username,
                 &pod_name,
                 "/Documents",
-                "hello.txt",
+                "upload.txt",
                 "1K",
                 Some(Compression::Snappy),
             )
             .await;
-        fs::remove_file("hello.txt").unwrap();
+        fs::remove_file("upload.txt").unwrap();
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), "hello.txt");
+        assert_eq!(res.unwrap(), "upload.txt");
     }
 
     #[tokio::test]
-    async fn test_download_succeeds() {
+    async fn test_download_buffer_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
@@ -837,10 +872,46 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .download(&username, &pod_name, "/Documents/hello.txt")
+            .download_buffer(&username, &pod_name, "/Documents/hello.txt")
             .await;
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), b"hello world");
+        let mut buf = res.unwrap();
+        let mut data = [0u8; 11];
+        buf.copy_to_slice(&mut data);
+        assert_eq!(&data, b"hello world");
+    }
+
+    #[tokio::test]
+    async fn test_download_file_succeeds() {
+        let mut fairos = Client::new();
+        let username = random_name();
+        let password = random_password();
+        let res = fairos.signup(&username, &password, None).await;
+        assert!(res.is_ok());
+        let pod_name = random_name();
+        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        assert!(res.is_ok());
+        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        assert!(res.is_ok());
+        let res = fairos
+            .upload_buffer(
+                &username,
+                &pod_name,
+                "/Documents",
+                "hello.txt",
+                "hello world".as_bytes(),
+                mime::TEXT_PLAIN,
+                "1K",
+                None,
+            )
+            .await;
+        assert!(res.is_ok());
+        let res = fairos
+            .download_file(&username, &pod_name, "/Documents/hello.txt", "download.txt")
+            .await;
+        assert!(res.is_ok());
+        assert_eq!(fs::read("download.txt").unwrap(), b"hello world");
+        fs::remove_file("download.txt").unwrap();
     }
 
     #[tokio::test]
