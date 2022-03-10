@@ -56,8 +56,14 @@ struct DirStatResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct FileUploadResponse {
+struct FileUploadFileNameResponse {
     file_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FileUploadResponse {
+    #[serde(rename = "Responses")]
+    responses: Vec<FileUploadFileNameResponse>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,7 +91,8 @@ struct FileStatResponse {
     creation_time: String,
     modification_time: String,
     access_time: String,
-    Blocks: Option<Vec<FileBlockResponse>>,
+    #[serde(rename = "Blocks")]
+    blocks: Option<Vec<FileBlockResponse>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -359,15 +366,14 @@ impl Client {
             },
             None => None,
         };
-        let res: JsonValue = self
+        let res: FileUploadResponse = self
             .upload_multipart("/file/upload", body, boundary.as_str(), cookie, compression)
             .await
             .map_err(|err| match err {
                 RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                 RequestError::Message(_) => FairOSError::FileSystem(FairOSFileSystemError::Error),
             })?;
-        let res: FileUploadResponse = serde_json::from_value(res["Responses"][0].clone()).unwrap();
-        Ok(res.file_name)
+        Ok(res.responses.get(0).unwrap().file_name.clone())
     }
 
     pub async fn upload_file<P: AsRef<Path>>(
@@ -397,15 +403,14 @@ impl Client {
             },
             None => None,
         };
-        let res: JsonValue = self
+        let res: FileUploadResponse = self
             .upload_multipart("/file/upload", body, boundary.as_str(), cookie, compression)
             .await
             .map_err(|err| match err {
                 RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                 RequestError::Message(_) => FairOSError::FileSystem(FairOSFileSystemError::Error),
             })?;
-        let res: FileUploadResponse = serde_json::from_value(res["Responses"][0].clone()).unwrap();
-        Ok(res.file_name)
+        Ok(res.responses.get(0).unwrap().file_name.clone())
     }
 
     pub async fn download_buffer(
@@ -427,7 +432,6 @@ impl Client {
             .download_multipart("/file/download", body, boundary.as_str(), cookie)
             .await
             .map_err(|err| {
-                println!("{:?}", err);
                 match err {
                     RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                     RequestError::Message(_) => {
@@ -458,7 +462,6 @@ impl Client {
             .download_multipart("/file/download", body, boundary.as_str(), cookie)
             .await
             .map_err(|err| {
-                println!("{:?}", err);
                 match err {
                     RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                     RequestError::Message(_) => {
@@ -548,7 +551,7 @@ impl Client {
             "" => None,
             _ => unreachable!(),
         };
-        let blocks = match res.Blocks {
+        let blocks = match res.blocks {
             Some(blocks) => blocks
                 .iter()
                 .map(|entry| FileBlock {
