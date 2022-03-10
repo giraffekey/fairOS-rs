@@ -6,7 +6,7 @@ use crate::{
 use std::collections::HashMap;
 
 use bip39::Mnemonic;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use serde::Deserialize;
 use serde_json::json;
@@ -57,8 +57,7 @@ pub struct UserInfo {
 }
 
 impl Client {
-    pub fn generate_mnemonic() -> String {
-        let mut rng = ChaCha20Rng::from_entropy();
+    pub fn generate_mnemonic(rng: &mut ChaCha20Rng) -> String {
         let mut entropy = [0u8; 16];
         rng.fill(&mut entropy);
         Mnemonic::from_entropy(&entropy).unwrap().to_string()
@@ -261,9 +260,10 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{Client, FairOSError, FairOSUserError};
+    use rand_chacha::ChaCha20Rng;
     use rand::{
         distributions::{Alphanumeric, Uniform},
-        thread_rng, Rng,
+        thread_rng, Rng, SeedableRng,
     };
 
     fn random_name() -> String {
@@ -284,7 +284,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_mnemonic() {
-        let mnemonic = Client::generate_mnemonic();
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mnemonic = Client::generate_mnemonic(&mut rng);
         assert_eq!(mnemonic.split(" ").count(), 12);
     }
 
@@ -293,7 +294,8 @@ mod tests {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
-        let mnemonic = Client::generate_mnemonic();
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mnemonic = Client::generate_mnemonic(&mut rng);
         let res = fairos.signup(&username, &password, Some(&mnemonic)).await;
         assert!(res.is_ok());
         let (address, mnemonic) = res.unwrap();
