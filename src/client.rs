@@ -78,7 +78,7 @@ impl Client {
                 let cookie = cookie.to_string();
                 self.remove_cookie(username);
                 Some(cookie)
-            },
+            }
             None => None,
         }
     }

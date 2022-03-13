@@ -431,13 +431,9 @@ impl Client {
         let buf = self
             .download_multipart("/file/download", body, boundary.as_str(), cookie)
             .await
-            .map_err(|err| {
-                match err {
-                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
-                    RequestError::Message(_) => {
-                        FairOSError::FileSystem(FairOSFileSystemError::Error)
-                    }
-                }
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::FileSystem(FairOSFileSystemError::Error),
             })?;
         Ok(buf)
     }
@@ -461,15 +457,11 @@ impl Client {
         let buf = self
             .download_multipart("/file/download", body, boundary.as_str(), cookie)
             .await
-            .map_err(|err| {
-                match err {
-                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
-                    RequestError::Message(_) => {
-                        FairOSError::FileSystem(FairOSFileSystemError::Error)
-                    }
-                }
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::FileSystem(FairOSFileSystemError::Error),
             })?;
-        fs::write(local_path, buf);
+        fs::write(local_path, buf).unwrap();
 
         Ok(())
     }

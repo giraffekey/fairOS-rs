@@ -260,11 +260,11 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{Client, FairOSError, FairOSUserError};
-    use rand_chacha::ChaCha20Rng;
     use rand::{
         distributions::{Alphanumeric, Uniform},
         thread_rng, Rng, SeedableRng,
     };
+    use rand_chacha::ChaCha20Rng;
 
     fn random_name() -> String {
         thread_rng()
