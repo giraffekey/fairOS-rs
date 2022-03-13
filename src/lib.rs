@@ -11,6 +11,7 @@ pub use error::{FairOSError, FairOSPodError, FairOSUserError};
 pub use filesystem::{
     Compression, DirEntry, DirInfo, FileBlock, FileEntry, FileInfo, SharedFileInfo,
 };
+pub use kv::{IndexType, KeyValueTable, KeyValueSeek};
 pub use pod::{PodInfo, SharedPodInfo};
 pub use user::{UserExport, UserInfo};
 
