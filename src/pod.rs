@@ -203,7 +203,11 @@ impl Client {
                 RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                 RequestError::Message(_) => FairOSError::Pod(FairOSPodError::Error),
             })?;
-        Ok((res.pod_name, res.shared_pod_name))
+        let mut pods = res.pod_name;
+        let mut shared_pods = res.shared_pod_name;
+        pods.sort();
+        shared_pods.sort();
+        Ok((pods, shared_pods))
     }
 
     pub async fn pod_info(&self, username: &str, name: &str) -> Result<PodInfo, FairOSError> {
@@ -412,9 +416,8 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.list_pods(&username).await;
         assert!(res.is_ok());
-        let (mut pods, shared_pods) = res.unwrap();
+        let (pods, shared_pods) = res.unwrap();
         let mut pod_names = vec![pod_name1, pod_name2];
-        pods.sort();
         pod_names.sort();
         assert_eq!(pods, pod_names);
         assert_eq!(shared_pods, Vec::<String>::new());

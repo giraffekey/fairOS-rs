@@ -214,14 +214,15 @@ impl Client {
                 RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                 RequestError::Message(_) => FairOSError::KeyValue(FairOSKeyValueError::Error),
             })?;
-        let tables = res
+        let mut tables = res
             .tables
             .iter()
             .map(|table| KeyValueTable {
                 name: table.table_name.clone(),
                 indexes: table.indexes.clone(),
             })
-            .collect();
+            .collect::<Vec<KeyValueTable>>();
+        tables.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
         Ok(tables)
     }
 
@@ -556,10 +557,8 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.kv_list_tables(&username, &pod_name).await;
         assert!(res.is_ok());
-        let mut tables = res.unwrap();
-        tables.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
         assert_eq!(
-            tables,
+            res.unwrap(),
             vec![
                 KeyValueTable {
                     name: "table1".into(),
