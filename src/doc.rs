@@ -31,12 +31,12 @@ struct DocListResponse {
 
 #[derive(Debug, Deserialize)]
 struct DocEntryGetResponse {
-	doc: String,
+    doc: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct DocFindResponse {
-	docs: Vec<String>,
+    docs: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -163,7 +163,7 @@ impl Client {
             .tables
             .iter()
             .map(|table| {
-            	let mut fields = table
+                let mut fields = table
                     .indexes
                     .iter()
                     .map(|prop| {
@@ -179,11 +179,11 @@ impl Client {
                     })
                     .collect::<Vec<(String, FieldType)>>();
                 fields.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-            	DocumentTable {
-	                name: table.table_name.clone(),
-	                fields,
-	            }
-	        })
+                DocumentTable {
+                    name: table.table_name.clone(),
+                    fields,
+                }
+            })
             .collect::<Vec<DocumentTable>>();
         tables.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
         Ok(tables)
@@ -196,9 +196,9 @@ impl Client {
         table_name: &str,
         doc: T,
     ) -> Result<String, FairOSError> {
-    	let id = Uuid::new_v4().to_string();
-    	let mut doc = json!(doc);
-    	doc["id"] = json!(&id);
+        let id = Uuid::new_v4().to_string();
+        let mut doc = json!(doc);
+        doc["id"] = json!(&id);
         let data = json!({
             "pod_name": pod_name,
             "table_name": table_name,
@@ -230,13 +230,13 @@ impl Client {
         query.insert("table_name", table_name);
         query.insert("id", id);
         let cookie = self.cookie(username).unwrap();
-        let res: DocEntryGetResponse =
-            self.get("/doc/entry/get", query, Some(cookie))
-                .await
-                .map_err(|err| match err {
-                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
-                    RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
-                })?;
+        let res: DocEntryGetResponse = self
+            .get("/doc/entry/get", query, Some(cookie))
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
+            })?;
         Ok(serde_json::from_slice(&base64::decode(&res.doc).unwrap()).unwrap())
     }
 
@@ -254,7 +254,7 @@ impl Client {
         query.insert("expr", expression);
         let limit = limit.map(|limit| limit.to_string()).unwrap_or("".into());
         if !limit.is_empty() {
-	        query.insert("limit", limit.as_str());
+            query.insert("limit", limit.as_str());
         }
         let cookie = self.cookie(username).unwrap();
         let res: DocFindResponse =
@@ -264,9 +264,11 @@ impl Client {
                     RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                     RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
                 })?;
-        let docs = res.docs.iter()
-        	.map(|doc| serde_json::from_slice(&base64::decode(&doc).unwrap()).unwrap())
-        	.collect();
+        let docs = res
+            .docs
+            .iter()
+            .map(|doc| serde_json::from_slice(&base64::decode(&doc).unwrap()).unwrap())
+            .collect();
         Ok(docs)
     }
 
@@ -312,13 +314,13 @@ impl Client {
         .as_bytes()
         .to_vec();
         let cookie = self.cookie(username).unwrap();
-        let _: MessageResponse = self
-            .delete("/doc/entry/del", data, cookie)
-            .await
-            .map_err(|err| match err {
-                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
-                RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
-            })?;
+        let _: MessageResponse =
+            self.delete("/doc/entry/del", data, cookie)
+                .await
+                .map_err(|err| match err {
+                    RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                    RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
+                })?;
         Ok(())
     }
 
@@ -332,7 +334,12 @@ impl Client {
         let mut multipart = Multipart::new();
         multipart.add_text("pod_name", pod_name);
         multipart.add_text("table_name", table_name);
-        multipart.add_stream("json", buffer, Some("data.json"), Some(mime::APPLICATION_JSON));
+        multipart.add_stream(
+            "json",
+            buffer,
+            Some("data.json"),
+            Some(mime::APPLICATION_JSON),
+        );
         let mut prepared = multipart.prepare().unwrap();
         let boundary = prepared.boundary().to_string();
         let mut body = Vec::new();
@@ -597,7 +604,17 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.doc_open_table(&username, &pod_name, "table").await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "text".into(), n: 12 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "text".into(),
+                    n: 12,
+                },
+            )
+            .await;
         assert!(res.is_ok());
     }
 
@@ -623,12 +640,30 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.doc_open_table(&username, &pod_name, "table").await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "text".into(), n: 12 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "text".into(),
+                    n: 12,
+                },
+            )
+            .await;
         assert!(res.is_ok());
         let id = res.unwrap();
-        let res = fairos.doc_get_document::<TestData>(&username, &pod_name, "table", &id).await;
+        let res = fairos
+            .doc_get_document::<TestData>(&username, &pod_name, "table", &id)
+            .await;
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), TestData { s: "text".into(), n: 12 });
+        assert_eq!(
+            res.unwrap(),
+            TestData {
+                s: "text".into(),
+                n: 12
+            }
+        );
     }
 
     #[tokio::test]
@@ -653,19 +688,77 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.doc_open_table(&username, &pod_name, "table").await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "a".into(), n: 8 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "a".into(),
+                    n: 8,
+                },
+            )
+            .await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "a".into(), n: 10 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "a".into(),
+                    n: 10,
+                },
+            )
+            .await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "b".into(), n: 12 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "b".into(),
+                    n: 12,
+                },
+            )
+            .await;
         assert!(res.is_ok());
         let id = res.unwrap();
-        let res = fairos.doc_find_documents::<TestData>(&username, &pod_name, "table", "n%3e9", None).await;
+        let res = fairos
+            .doc_find_documents::<TestData>(&username, &pod_name, "table", "n%3e9", None)
+            .await;
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), vec![TestData { s: "a".into(), n: 10 }, TestData { s: "b".into(), n: 12 }]);
-        let res = fairos.doc_find_documents::<TestData>(&username, &pod_name, "table", "s=%22a%22", None).await;
+        assert_eq!(
+            res.unwrap(),
+            vec![
+                TestData {
+                    s: "a".into(),
+                    n: 10
+                },
+                TestData {
+                    s: "b".into(),
+                    n: 12
+                }
+            ]
+        );
+        let res = fairos
+            .doc_find_documents::<TestData>(&username, &pod_name, "table", "s=%22a%22", None)
+            .await;
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), vec![TestData { s: "a".into(), n: 8 }, TestData { s: "a".into(), n: 10 }]);
+        assert_eq!(
+            res.unwrap(),
+            vec![
+                TestData {
+                    s: "a".into(),
+                    n: 8
+                },
+                TestData {
+                    s: "a".into(),
+                    n: 10
+                }
+            ]
+        );
     }
 
     #[tokio::test]
@@ -690,11 +783,33 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.doc_open_table(&username, &pod_name, "table").await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "text".into(), n: 12 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "text".into(),
+                    n: 12,
+                },
+            )
+            .await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "text".into(), n: 10 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "text".into(),
+                    n: 10,
+                },
+            )
+            .await;
         assert!(res.is_ok());
-        let res = fairos.doc_count_documents(&username, &pod_name, "table", None).await;
+        let res = fairos
+            .doc_count_documents(&username, &pod_name, "table", None)
+            .await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), 2);
     }
@@ -721,12 +836,26 @@ mod tests {
         assert!(res.is_ok());
         let res = fairos.doc_open_table(&username, &pod_name, "table").await;
         assert!(res.is_ok());
-        let res = fairos.doc_put_document(&username, &pod_name, "table", TestData { s: "text".into(), n: 12 }).await;
+        let res = fairos
+            .doc_put_document(
+                &username,
+                &pod_name,
+                "table",
+                TestData {
+                    s: "text".into(),
+                    n: 12,
+                },
+            )
+            .await;
         assert!(res.is_ok());
         let id = res.unwrap();
-        let res = fairos.doc_delete_document(&username, &pod_name, "table", &id).await;
+        let res = fairos
+            .doc_delete_document(&username, &pod_name, "table", &id)
+            .await;
         assert!(res.is_ok());
-        let res = fairos.doc_get_document::<TestData>(&username, &pod_name, "table", &id).await;
+        let res = fairos
+            .doc_get_document::<TestData>(&username, &pod_name, "table", &id)
+            .await;
         assert!(res.is_err());
     }
 
