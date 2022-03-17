@@ -51,7 +51,7 @@ pub enum IndexType {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct KeyValueTable {
+pub struct KeyValueStore {
     pub name: String,
     pub indexes: Vec<String>,
 }
@@ -59,8 +59,8 @@ pub struct KeyValueTable {
 pub struct KeyValueSeek<'a> {
     client: &'a Client,
     username: String,
-    pod_name: String,
-    table_name: String,
+    pod: String,
+    store: String,
     limit: Option<u32>,
 }
 
@@ -69,8 +69,8 @@ impl Stream for KeyValueSeek<'_> {
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut query = HashMap::new();
-        query.insert("pod_name", self.pod_name.as_str());
-        query.insert("table_name", self.table_name.as_str());
+        query.insert("pod_name", self.pod.as_str());
+        query.insert("table_name", self.store.as_str());
         let cookie = self.client.cookie(&self.username).unwrap();
         let mut req = self
             .client
@@ -97,10 +97,10 @@ impl Stream for KeyValueSeek<'_> {
 }
 
 impl Client {
-    pub async fn kv_create_table(
+    pub async fn create_kv_store(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         name: &str,
         index_type: IndexType,
     ) -> Result<(), FairOSError> {
@@ -109,7 +109,7 @@ impl Client {
             IndexType::Number => "number",
         };
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "table_name": name,
             "indexType": index_type,
         })
@@ -127,14 +127,14 @@ impl Client {
         Ok(())
     }
 
-    pub async fn kv_open_table(
+    pub async fn open_kv_store(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         name: &str,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "table_name": name,
         })
         .to_string()
@@ -151,38 +151,14 @@ impl Client {
         Ok(())
     }
 
-    pub async fn kv_count_entries(
+    pub async fn delete_kv_store(
         &self,
         username: &str,
-        pod_name: &str,
-        name: &str,
-    ) -> Result<u32, FairOSError> {
-        let data = json!({
-            "pod_name": pod_name,
-            "table_name": name,
-        })
-        .to_string()
-        .as_bytes()
-        .to_vec();
-        let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
-            .post::<KvCountResponse>("/kv/count", data, Some(cookie))
-            .await
-            .map_err(|err| match err {
-                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
-                RequestError::Message(_) => FairOSError::KeyValue(FairOSKeyValueError::Error),
-            })?;
-        Ok(res.count)
-    }
-
-    pub async fn kv_delete_table(
-        &self,
-        username: &str,
-        pod_name: &str,
+        pod: &str,
         name: &str,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "table_name": name,
         })
         .to_string()
@@ -199,13 +175,13 @@ impl Client {
         Ok(())
     }
 
-    pub async fn kv_list_tables(
+    pub async fn list_kv_stores(
         &self,
         username: &str,
-        pod_name: &str,
-    ) -> Result<Vec<KeyValueTable>, FairOSError> {
+        pod: &str,
+    ) -> Result<Vec<KeyValueStore>, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         let cookie = self.cookie(username).unwrap();
         let res: KvListResponse = self
             .get("/kv/ls", query, Some(cookie))
@@ -214,29 +190,29 @@ impl Client {
                 RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                 RequestError::Message(_) => FairOSError::KeyValue(FairOSKeyValueError::Error),
             })?;
-        let mut tables = res
+        let mut stores = res
             .tables
             .iter()
-            .map(|table| KeyValueTable {
+            .map(|table| KeyValueStore {
                 name: table.table_name.clone(),
                 indexes: table.indexes.clone(),
             })
-            .collect::<Vec<KeyValueTable>>();
-        tables.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
-        Ok(tables)
+            .collect::<Vec<KeyValueStore>>();
+        stores.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
+        Ok(stores)
     }
 
-    pub async fn kv_put_entry<T: Serialize>(
+    pub async fn put_kv_pair<T: Serialize>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        store: &str,
         key: &str,
         value: T,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
-            "table_name": table_name,
+            "pod_name": pod,
+            "table_name": store,
             "key": key,
             "value": serde_json::to_string(&value).unwrap(),
         })
@@ -254,16 +230,16 @@ impl Client {
         Ok(())
     }
 
-    pub async fn kv_get_entry<T: DeserializeOwned>(
+    pub async fn get_kv_pair<T: DeserializeOwned>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        store: &str,
         key: &str,
     ) -> Result<T, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
-        query.insert("table_name", table_name);
+        query.insert("pod_name", pod);
+        query.insert("table_name", store);
         query.insert("key", key);
         query.insert("format", "byte-string");
         let cookie = self.cookie(username).unwrap();
@@ -277,16 +253,16 @@ impl Client {
         Ok(serde_json::from_slice(&base64::decode(&res.values).unwrap()).unwrap())
     }
 
-    pub async fn kv_delete_entry(
+    pub async fn delete_kv_pair(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        store: &str,
         key: &str,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
-            "table_name": table_name,
+            "pod_name": pod,
+            "table_name": store,
             "key": key,
         })
         .to_string()
@@ -303,16 +279,40 @@ impl Client {
         Ok(())
     }
 
-    pub async fn kv_entry_exists(
+    pub async fn count_kv_pairs(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        store: &str,
+    ) -> Result<u32, FairOSError> {
+        let data = json!({
+            "pod_name": pod,
+            "table_name": store,
+        })
+        .to_string()
+        .as_bytes()
+        .to_vec();
+        let cookie = self.cookie(username).unwrap();
+        let (res, _) = self
+            .post::<KvCountResponse>("/kv/count", data, Some(cookie))
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::KeyValue(FairOSKeyValueError::Error),
+            })?;
+        Ok(res.count)
+    }
+
+    pub async fn kv_pair_exists(
+        &self,
+        username: &str,
+        pod: &str,
+        store: &str,
         key: &str,
     ) -> Result<bool, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
-        query.insert("table_name", table_name);
+        query.insert("pod_name", pod);
+        query.insert("table_name", store);
         query.insert("key", key);
         let cookie = self.cookie(username).unwrap();
         let res: KvPresentResponse =
@@ -325,19 +325,19 @@ impl Client {
         Ok(res.present)
     }
 
-    pub async fn kv_load_csv_buffer<R: Read>(
+    pub async fn load_csv_buffer<R: Read>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        store: &str,
         buffer: R,
         memory: bool,
     ) -> Result<(), FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
-        multipart.add_text("table_name", table_name);
+        multipart.add_text("pod_name", pod);
+        multipart.add_text("table_name", store);
         if memory {
-            multipart.add_text("memory", table_name);
+            multipart.add_text("memory", store);
         }
         multipart.add_stream("csv", buffer, Some("data.csv"), Some(mime::TEXT_CSV));
         let mut prepared = multipart.prepare().unwrap();
@@ -356,19 +356,19 @@ impl Client {
         Ok(())
     }
 
-    pub async fn kv_load_csv_file<P: AsRef<Path>>(
+    pub async fn load_csv_file<P: AsRef<Path>>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        store: &str,
         local_path: P,
         memory: bool,
     ) -> Result<(), FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
-        multipart.add_text("table_name", table_name);
+        multipart.add_text("pod_name", pod);
+        multipart.add_text("table_name", store);
         if memory {
-            multipart.add_text("memory", table_name);
+            multipart.add_text("memory", store);
         }
         multipart.add_file("csv", local_path.as_ref());
         let mut prepared = multipart.prepare().unwrap();
@@ -387,18 +387,18 @@ impl Client {
         Ok(())
     }
 
-    pub async fn kv_seek(
+    pub(crate) async fn kv_seek(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        store: &str,
         start_key: &str,
         end_key: Option<&str>,
         limit: Option<u32>,
     ) -> Result<KeyValueSeek<'_>, FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
-            "table_name": table_name,
+            "pod_name": pod,
+            "table_name": store,
             "start_prefix": start_key,
             "end_prefix": end_key,
             "limit": limit,
@@ -417,8 +417,8 @@ impl Client {
         Ok(KeyValueSeek {
             client: &self,
             username: username.into(),
-            pod_name: pod_name.into(),
-            table_name: table_name.into(),
+            pod: pod.into(),
+            store: store.into(),
             limit,
         })
     }
@@ -426,7 +426,7 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, IndexType, KeyValueTable};
+    use super::{Client, IndexType, KeyValueStore};
     use futures::StreamExt;
     use rand::{
         distributions::{Alphanumeric, Uniform},
@@ -457,114 +457,85 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kv_create_table_succeeds() {
+    async fn test_create_kv_store_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
             .await;
         assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn test_kv_open_table_succeeds() {
+    async fn test_open_kv_store_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
             .await;
         assert!(res.is_ok());
-        let res = fairos.kv_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_kv_store(&username, &pod, "table").await;
         assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn test_kv_count_entries_succeeds() {
+    async fn test_delete_kv_store_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
             .await;
         assert!(res.is_ok());
-        let res = fairos.kv_open_table(&username, &pod_name, "table").await;
-        assert!(res.is_ok());
-        let res = fairos
-            .kv_put_entry(&username, &pod_name, "table", "key", "val")
-            .await;
-        assert!(res.is_ok());
-        let res = fairos
-            .kv_put_entry(&username, &pod_name, "table", "key2", 42)
-            .await;
-        assert!(res.is_ok());
-        let res = fairos.kv_count_entries(&username, &pod_name, "table").await;
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_kv_delete_table_succeeds() {
-        let mut fairos = Client::new();
-        let username = random_name();
-        let password = random_password();
-        let res = fairos.signup(&username, &password, None).await;
-        assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
-        assert!(res.is_ok());
-        let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
-            .await;
-        assert!(res.is_ok());
-        let res = fairos.kv_delete_table(&username, &pod_name, "table").await;
+        let res = fairos.delete_kv_store(&username, &pod, "table").await;
         assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn test_kv_list_tables_succeeds() {
+    async fn test_list_kv_stores_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table1", IndexType::Str)
+            .create_kv_store(&username, &pod, "table1", IndexType::Str)
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table2", IndexType::Number)
+            .create_kv_store(&username, &pod, "table2", IndexType::Number)
             .await;
         assert!(res.is_ok());
-        let res = fairos.kv_list_tables(&username, &pod_name).await;
+        let res = fairos.list_kv_stores(&username, &pod).await;
         assert!(res.is_ok());
         assert_eq!(
             res.unwrap(),
             vec![
-                KeyValueTable {
+                KeyValueStore {
                     name: "table1".into(),
                     indexes: vec!["StringIndex".into()],
                 },
-                KeyValueTable {
+                KeyValueStore {
                     name: "table2".into(),
                     indexes: vec!["StringIndex".into()],
                 },
@@ -573,25 +544,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kv_put_entry_succeeds() {
+    async fn test_put_kv_pair_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
             .await;
         assert!(res.is_ok());
-        let res = fairos.kv_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_kv_store(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_put_entry(
+            .put_kv_pair(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 "key",
                 TestData {
@@ -604,25 +575,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kv_get_entry_succeeds() {
+    async fn test_get_kv_pair_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
             .await;
         assert!(res.is_ok());
-        let res = fairos.kv_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_kv_store(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_put_entry(
+            .put_kv_pair(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 "key",
                 TestData {
@@ -633,7 +604,7 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_get_entry::<TestData>(&username, &pod_name, "table", "key")
+            .get_kv_pair::<TestData>(&username, &pod, "table", "key")
             .await;
         assert!(res.is_ok());
         assert_eq!(
@@ -646,92 +617,117 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_kv_delete_entry_succeeds() {
+    async fn test_delete_kv_pair_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
             .await;
         assert!(res.is_ok());
-        let res = fairos.kv_open_table(&username, &pod_name, "table").await;
-        assert!(res.is_ok());
-        let res = fairos
-            .kv_put_entry(&username, &pod_name, "table", "key", "val")
-            .await;
+        let res = fairos.open_kv_store(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_delete_entry(&username, &pod_name, "table", "key")
+            .put_kv_pair(&username, &pod, "table", "key", "val")
             .await;
+        assert!(res.is_ok());
+        let res = fairos.delete_kv_pair(&username, &pod, "table", "key").await;
         assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn test_kv_entry_exists_succeeds() {
+    async fn test_count_kv_pairs_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
             .await;
         assert!(res.is_ok());
-        let res = fairos.kv_open_table(&username, &pod_name, "table").await;
-        assert!(res.is_ok());
-        let res = fairos
-            .kv_put_entry(&username, &pod_name, "table", "key", "val")
-            .await;
+        let res = fairos.open_kv_store(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .kv_entry_exists(&username, &pod_name, "table", "key")
+            .put_kv_pair(&username, &pod, "table", "key", "val")
             .await;
+        assert!(res.is_ok());
+        let res = fairos
+            .put_kv_pair(&username, &pod, "table", "key2", 42)
+            .await;
+        assert!(res.is_ok());
+        let res = fairos.count_kv_pairs(&username, &pod, "table").await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_kv_pair_exists_succeeds() {
+        let mut fairos = Client::new();
+        let username = random_name();
+        let password = random_password();
+        let res = fairos.signup(&username, &password, None).await;
+        assert!(res.is_ok());
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
+        assert!(res.is_ok());
+        let res = fairos
+            .create_kv_store(&username, &pod, "table", IndexType::Str)
+            .await;
+        assert!(res.is_ok());
+        let res = fairos.open_kv_store(&username, &pod, "table").await;
+        assert!(res.is_ok());
+        let res = fairos
+            .put_kv_pair(&username, &pod, "table", "key", "val")
+            .await;
+        assert!(res.is_ok());
+        let res = fairos.kv_pair_exists(&username, &pod, "table", "key").await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), true);
         let res = fairos
-            .kv_entry_exists(&username, &pod_name, "table", "key2")
+            .kv_pair_exists(&username, &pod, "table", "key2")
             .await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), false);
     }
 
     // #[tokio::test]
-    // async fn test_kv_load_csv_buffer_succeeds() {
+    // async fn test_load_csv_buffer_succeeds() {
     //     let mut fairos = Client::new();
     //     let username = random_name();
     //     let password = random_password();
     //     let res = fairos.signup(&username, &password, None).await;
     //     assert!(res.is_ok());
-    //     let pod_name = random_name();
-    //     let res = fairos.create_pod(&username, &pod_name, &password).await;
+    //     let pod = random_name();
+    //     let res = fairos.create_pod(&username, &pod, &password).await;
     //     assert!(res.is_ok());
-    //     let res = fairos.kv_create_table(&username, &pod_name, "table", IndexType::Str).await;
+    //     let res = fairos.create_kv_store(&username, &pod, "table", IndexType::Str).await;
     //     assert!(res.is_ok());
-    //     let res = fairos.kv_open_table(&username, &pod_name, "table").await;
+    //     let res = fairos.open_kv_store(&username, &pod, "table").await;
     //     assert!(res.is_ok());
     // }
 
     // #[tokio::test]
-    // async fn test_kv_load_csv_file_succeeds() {
+    // async fn test_load_csv_file_succeeds() {
     //     let mut fairos = Client::new();
     //     let username = random_name();
     //     let password = random_password();
     //     let res = fairos.signup(&username, &password, None).await;
     //     assert!(res.is_ok());
-    //     let pod_name = random_name();
-    //     let res = fairos.create_pod(&username, &pod_name, &password).await;
+    //     let pod = random_name();
+    //     let res = fairos.create_pod(&username, &pod, &password).await;
     //     assert!(res.is_ok());
-    //     let res = fairos.kv_create_table(&username, &pod_name, "table", IndexType::Str).await;
+    //     let res = fairos.create_kv_store(&username, &pod, "table", IndexType::Str).await;
     //     assert!(res.is_ok());
-    //     let res = fairos.kv_open_table(&username, &pod_name, "table").await;
+    //     let res = fairos.open_kv_store(&username, &pod, "table").await;
     //     assert!(res.is_ok());
     // }
 
@@ -742,33 +738,33 @@ mod tests {
     //     let password = random_password();
     //     let res = fairos.signup(&username, &password, None).await;
     //     assert!(res.is_ok());
-    //     let pod_name = random_name();
-    //     let res = fairos.create_pod(&username, &pod_name, &password).await;
+    //     let pod = random_name();
+    //     let res = fairos.create_pod(&username, &pod, &password).await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .kv_create_table(&username, &pod_name, "table", IndexType::Str)
+    //         .create_kv_store(&username, &pod, "table", IndexType::Str)
     //         .await;
     //     assert!(res.is_ok());
-    //     let res = fairos.kv_open_table(&username, &pod_name, "table").await;
+    //     let res = fairos.open_kv_store(&username, &pod, "table").await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .kv_put_entry(&username, &pod_name, "table", "abc", "def")
-    //         .await;
-    //     assert!(res.is_ok());
-    //     let res = fairos
-    //         .kv_put_entry(&username, &pod_name, "table", "cde", "fgh")
+    //         .put_kv_pair(&username, &pod, "table", "abc", "def")
     //         .await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .kv_put_entry(&username, &pod_name, "table", "bcd", "efg")
+    //         .put_kv_pair(&username, &pod, "table", "cde", "fgh")
     //         .await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .kv_put_entry(&username, &pod_name, "table", "def", "ghi")
+    //         .put_kv_pair(&username, &pod, "table", "bcd", "efg")
     //         .await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .kv_seek(&username, &pod_name, "table", "bcd", None, None)
+    //         .put_kv_pair(&username, &pod, "table", "def", "ghi")
+    //         .await;
+    //     assert!(res.is_ok());
+    //     let res = fairos
+    //         .kv_seek(&username, &pod, "table", "bcd", None, None)
     //         .await;
     //     assert!(res.is_ok());
     //     let pairs = res.unwrap().collect::<Vec<(String, String)>>().await;

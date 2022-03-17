@@ -47,16 +47,16 @@ pub enum FieldType {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct DocumentTable {
+pub struct DocumentDatabase {
     name: String,
     fields: Vec<(String, FieldType)>,
 }
 
 impl Client {
-    pub async fn doc_create_table(
+    pub async fn create_doc_database(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         name: &str,
         fields: Vec<(&str, FieldType)>,
         mutable: bool,
@@ -77,7 +77,7 @@ impl Client {
             .collect::<Vec<String>>()
             .join(",");
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "table_name": name,
             "si": si,
             "mutable": mutable,
@@ -96,14 +96,14 @@ impl Client {
         Ok(())
     }
 
-    pub async fn doc_open_table(
+    pub async fn open_doc_database(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         name: &str,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "table_name": name,
         })
         .to_string()
@@ -120,14 +120,14 @@ impl Client {
         Ok(())
     }
 
-    pub async fn doc_delete_table(
+    pub async fn delete_doc_database(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         name: &str,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "table_name": name,
         })
         .to_string()
@@ -144,13 +144,13 @@ impl Client {
         Ok(())
     }
 
-    pub async fn doc_list_tables(
+    pub async fn list_doc_databases(
         &self,
         username: &str,
-        pod_name: &str,
-    ) -> Result<Vec<DocumentTable>, FairOSError> {
+        pod: &str,
+    ) -> Result<Vec<DocumentDatabase>, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         let cookie = self.cookie(username).unwrap();
         let res: DocListResponse =
             self.get("/doc/ls", query, Some(cookie))
@@ -159,7 +159,7 @@ impl Client {
                     RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
                     RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
                 })?;
-        let mut tables = res
+        let mut databases = res
             .tables
             .iter()
             .map(|table| {
@@ -179,29 +179,29 @@ impl Client {
                     })
                     .collect::<Vec<(String, FieldType)>>();
                 fields.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                DocumentTable {
+                DocumentDatabase {
                     name: table.table_name.clone(),
                     fields,
                 }
             })
-            .collect::<Vec<DocumentTable>>();
-        tables.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
-        Ok(tables)
+            .collect::<Vec<DocumentDatabase>>();
+        databases.sort_by(|a, b| a.name.partial_cmp(&b.name).unwrap());
+        Ok(databases)
     }
 
-    pub async fn doc_put_document<T: Serialize>(
+    pub async fn put_document<T: Serialize>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        database: &str,
         doc: T,
     ) -> Result<String, FairOSError> {
         let id = Uuid::new_v4().to_string();
         let mut doc = json!(doc);
         doc["id"] = json!(&id);
         let data = json!({
-            "pod_name": pod_name,
-            "table_name": table_name,
+            "pod_name": pod,
+            "table_name": database,
             "doc": serde_json::to_string(&doc).unwrap(),
         })
         .to_string()
@@ -218,16 +218,16 @@ impl Client {
         Ok(id)
     }
 
-    pub async fn doc_get_document<T: DeserializeOwned>(
+    pub async fn get_document<T: DeserializeOwned>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        database: &str,
         id: &str,
     ) -> Result<T, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
-        query.insert("table_name", table_name);
+        query.insert("pod_name", pod);
+        query.insert("table_name", database);
         query.insert("id", id);
         let cookie = self.cookie(username).unwrap();
         let res: DocEntryGetResponse = self
@@ -240,17 +240,17 @@ impl Client {
         Ok(serde_json::from_slice(&base64::decode(&res.doc).unwrap()).unwrap())
     }
 
-    pub async fn doc_find_documents<T: DeserializeOwned>(
+    pub async fn find_documents<T: DeserializeOwned>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        database: &str,
         expression: &str,
         limit: Option<u32>,
     ) -> Result<Vec<T>, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
-        query.insert("table_name", table_name);
+        query.insert("pod_name", pod);
+        query.insert("table_name", database);
         query.insert("expr", expression);
         let limit = limit.map(|limit| limit.to_string()).unwrap_or("".into());
         if !limit.is_empty() {
@@ -272,42 +272,16 @@ impl Client {
         Ok(docs)
     }
 
-    pub async fn doc_count_documents(
+    pub async fn delete_document(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
-        expression: Option<&str>,
-    ) -> Result<u32, FairOSError> {
-        let data = json!({
-            "pod_name": pod_name,
-            "table_name": table_name,
-            "expr": expression,
-        })
-        .to_string()
-        .as_bytes()
-        .to_vec();
-        let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
-            .post::<MessageResponse>("/doc/count", data, Some(cookie))
-            .await
-            .map_err(|err| match err {
-                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
-                RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
-            })?;
-        Ok(res.message.parse().unwrap())
-    }
-
-    pub async fn doc_delete_document(
-        &self,
-        username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        database: &str,
         id: &str,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
-            "table_name": table_name,
+            "pod_name": pod,
+            "table_name": database,
             "id": id,
         })
         .to_string()
@@ -324,16 +298,42 @@ impl Client {
         Ok(())
     }
 
-    pub async fn doc_load_json_buffer<R: Read>(
+    pub async fn count_documents(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        database: &str,
+        expression: Option<&str>,
+    ) -> Result<u32, FairOSError> {
+        let data = json!({
+            "pod_name": pod,
+            "table_name": database,
+            "expr": expression,
+        })
+        .to_string()
+        .as_bytes()
+        .to_vec();
+        let cookie = self.cookie(username).unwrap();
+        let (res, _) = self
+            .post::<MessageResponse>("/doc/count", data, Some(cookie))
+            .await
+            .map_err(|err| match err {
+                RequestError::CouldNotConnect => FairOSError::CouldNotConnect,
+                RequestError::Message(_) => FairOSError::Document(FairOSDocumentError::Error),
+            })?;
+        Ok(res.message.parse().unwrap())
+    }
+
+    pub async fn load_json_buffer<R: Read>(
+        &self,
+        username: &str,
+        pod: &str,
+        database: &str,
         buffer: R,
     ) -> Result<(), FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
-        multipart.add_text("table_name", table_name);
+        multipart.add_text("pod_name", pod);
+        multipart.add_text("table_name", database);
         multipart.add_stream(
             "json",
             buffer,
@@ -356,16 +356,16 @@ impl Client {
         Ok(())
     }
 
-    pub async fn doc_load_json_file<P: AsRef<Path>>(
+    pub async fn load_json_file<P: AsRef<Path>>(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
+        pod: &str,
+        database: &str,
         local_path: P,
     ) -> Result<(), FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
-        multipart.add_text("table_name", table_name);
+        multipart.add_text("pod_name", pod);
+        multipart.add_text("table_name", database);
         multipart.add_file("json", local_path.as_ref());
         let mut prepared = multipart.prepare().unwrap();
         let boundary = prepared.boundary().to_string();
@@ -383,17 +383,17 @@ impl Client {
         Ok(())
     }
 
-    pub async fn doc_index_json(
+    pub async fn index_json(
         &self,
         username: &str,
-        pod_name: &str,
-        table_name: &str,
-        table_file: &str,
+        pod: &str,
+        database: &str,
+        file: &str,
     ) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
-            "table_name": table_name,
-            "file_name": table_file,
+            "pod_name": pod,
+            "table_name": database,
+            "file_name": file,
         })
         .to_string()
         .as_bytes()
@@ -412,7 +412,7 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, DocumentTable, FieldType};
+    use super::{Client, DocumentDatabase, FieldType};
     use futures::StreamExt;
     use rand::{
         distributions::{Alphanumeric, Uniform},
@@ -444,19 +444,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_doc_create_table_succeeds() {
+    async fn test_create_doc_database_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 vec![("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
@@ -466,67 +466,67 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_doc_open_table_succeeds() {
+    async fn test_open_doc_database_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 vec![("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_doc_database(&username, &pod, "table").await;
         assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn test_doc_delete_table_succeeds() {
+    async fn test_delete_doc_database_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 vec![("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.doc_delete_table(&username, &pod_name, "table").await;
+        let res = fairos.delete_doc_database(&username, &pod, "table").await;
         assert!(res.is_ok());
     }
 
     #[tokio::test]
-    async fn test_doc_list_tables_succeeds() {
+    async fn test_list_doc_databases_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table1",
                 vec![("s1", FieldType::Str), ("n2", FieldType::Number)],
                 true,
@@ -534,31 +534,25 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
-                &username,
-                &pod_name,
-                "table2",
-                vec![("m", FieldType::Map)],
-                true,
-            )
+            .create_doc_database(&username, &pod, "table2", vec![("m", FieldType::Map)], true)
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table3",
                 vec![("s2", FieldType::Str), ("n1", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.doc_list_tables(&username, &pod_name).await;
+        let res = fairos.list_doc_databases(&username, &pod).await;
         assert!(res.is_ok());
         assert_eq!(
             res.unwrap(),
             vec![
-                DocumentTable {
+                DocumentDatabase {
                     name: "table1".into(),
                     fields: vec![
                         ("id".into(), FieldType::Str),
@@ -566,11 +560,11 @@ mod tests {
                         ("s1".into(), FieldType::Str),
                     ],
                 },
-                DocumentTable {
+                DocumentDatabase {
                     name: "table2".into(),
                     fields: vec![("id".into(), FieldType::Str), ("m".into(), FieldType::Map)],
                 },
-                DocumentTable {
+                DocumentDatabase {
                     name: "table3".into(),
                     fields: vec![
                         ("id".into(), FieldType::Str),
@@ -583,31 +577,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_doc_put_document_succeeds() {
+    async fn test_put_document_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 vec![("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_doc_database(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_put_document(
+            .put_document(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 TestData {
                     s: "text".into(),
@@ -619,31 +613,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_doc_get_document_succeeds() {
+    async fn test_get_document_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 vec![("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_doc_database(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_put_document(
+            .put_document(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 TestData {
                     s: "text".into(),
@@ -654,7 +648,7 @@ mod tests {
         assert!(res.is_ok());
         let id = res.unwrap();
         let res = fairos
-            .doc_get_document::<TestData>(&username, &pod_name, "table", &id)
+            .get_document::<TestData>(&username, &pod, "table", &id)
             .await;
         assert!(res.is_ok());
         assert_eq!(
@@ -667,31 +661,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_doc_find_documents_succeeds() {
+    async fn test_find_documents_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 vec![("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_doc_database(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_put_document(
+            .put_document(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 TestData {
                     s: "a".into(),
@@ -701,9 +695,9 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_put_document(
+            .put_document(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 TestData {
                     s: "a".into(),
@@ -713,9 +707,9 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_put_document(
+            .put_document(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 TestData {
                     s: "b".into(),
@@ -726,7 +720,7 @@ mod tests {
         assert!(res.is_ok());
         let id = res.unwrap();
         let res = fairos
-            .doc_find_documents::<TestData>(&username, &pod_name, "table", "n%3e9", None)
+            .find_documents::<TestData>(&username, &pod, "table", "n%3e9", None)
             .await;
         assert!(res.is_ok());
         assert_eq!(
@@ -743,7 +737,7 @@ mod tests {
             ]
         );
         let res = fairos
-            .doc_find_documents::<TestData>(&username, &pod_name, "table", "s=%22a%22", None)
+            .find_documents::<TestData>(&username, &pod, "table", "s=%22a%22", None)
             .await;
         assert!(res.is_ok());
         assert_eq!(
@@ -762,84 +756,31 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_doc_count_documents_succeeds() {
+    async fn test_delete_document_succeeds() {
         let mut fairos = Client::new();
         let username = random_name();
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_create_table(
+            .create_doc_database(
                 &username,
-                &pod_name,
+                &pod,
                 "table",
                 vec![("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+        let res = fairos.open_doc_database(&username, &pod, "table").await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_put_document(
+            .put_document(
                 &username,
-                &pod_name,
-                "table",
-                TestData {
-                    s: "text".into(),
-                    n: 12,
-                },
-            )
-            .await;
-        assert!(res.is_ok());
-        let res = fairos
-            .doc_put_document(
-                &username,
-                &pod_name,
-                "table",
-                TestData {
-                    s: "text".into(),
-                    n: 10,
-                },
-            )
-            .await;
-        assert!(res.is_ok());
-        let res = fairos
-            .doc_count_documents(&username, &pod_name, "table", None)
-            .await;
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_doc_delete_document_succeeds() {
-        let mut fairos = Client::new();
-        let username = random_name();
-        let password = random_password();
-        let res = fairos.signup(&username, &password, None).await;
-        assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
-        assert!(res.is_ok());
-        let res = fairos
-            .doc_create_table(
-                &username,
-                &pod_name,
-                "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
-                true,
-            )
-            .await;
-        assert!(res.is_ok());
-        let res = fairos.doc_open_table(&username, &pod_name, "table").await;
-        assert!(res.is_ok());
-        let res = fairos
-            .doc_put_document(
-                &username,
-                &pod_name,
+                &pod,
                 "table",
                 TestData {
                     s: "text".into(),
@@ -849,14 +790,63 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let id = res.unwrap();
+        let res = fairos.delete_document(&username, &pod, "table", &id).await;
+        assert!(res.is_ok());
         let res = fairos
-            .doc_delete_document(&username, &pod_name, "table", &id)
+            .get_document::<TestData>(&username, &pod, "table", &id)
+            .await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_count_documents_succeeds() {
+        let mut fairos = Client::new();
+        let username = random_name();
+        let password = random_password();
+        let res = fairos.signup(&username, &password, None).await;
+        assert!(res.is_ok());
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
+        assert!(res.is_ok());
+        let res = fairos
+            .create_doc_database(
+                &username,
+                &pod,
+                "table",
+                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                true,
+            )
+            .await;
+        assert!(res.is_ok());
+        let res = fairos.open_doc_database(&username, &pod, "table").await;
+        assert!(res.is_ok());
+        let res = fairos
+            .put_document(
+                &username,
+                &pod,
+                "table",
+                TestData {
+                    s: "text".into(),
+                    n: 12,
+                },
+            )
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .doc_get_document::<TestData>(&username, &pod_name, "table", &id)
+            .put_document(
+                &username,
+                &pod,
+                "table",
+                TestData {
+                    s: "text".into(),
+                    n: 10,
+                },
+            )
             .await;
-        assert!(res.is_err());
+        assert!(res.is_ok());
+        let res = fairos.count_documents(&username, &pod, "table", None).await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), 2);
     }
 
     // #[tokio::test]
@@ -866,82 +856,82 @@ mod tests {
     //     let password = random_password();
     //     let res = fairos.signup(&username, &password, None).await;
     //     assert!(res.is_ok());
-    //     let pod_name = random_name();
-    //     let res = fairos.create_pod(&username, &pod_name, &password).await;
+    //     let pod = random_name();
+    //     let res = fairos.create_pod(&username, &pod, &password).await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .doc_create_table(
+    //         .create_doc_database(
     //             &username,
-    //             &pod_name,
+    //             &pod,
     //             "table",
     //             vec![("s", FieldType::Str), ("n", FieldType::Number)],
     //             true,
     //         )
     //         .await;
     //     assert!(res.is_ok());
-    //     let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+    //     let res = fairos.open_doc_database(&username, &pod, "table").await;
     //     assert!(res.is_ok());
-    //     let res = fairos.doc_load_json_buffer(&username, &pod_name, "table", "[{\"s\": \"text\", \"n\": 12}, {\"s\": \"text\", \"n\": 10}]".as_bytes()).await;
+    //     let res = fairos.doc_load_json_buffer(&username, &pod, "table", "[{\"s\": \"text\", \"n\": 12}, {\"s\": \"text\", \"n\": 10}]".as_bytes()).await;
     //     assert!(res.is_ok());
-    //     let res = fairos.doc_count_documents(&username, &pod_name, "table", None).await;
+    //     let res = fairos.count_documents(&username, &pod, "table", None).await;
     //     assert!(res.is_ok());
     //     assert_eq!(res.unwrap(), 2);
     // }
 
     // #[tokio::test]
-    // async fn test_doc_load_json_file_succeeds() {
+    // async fn test_load_json_file_succeeds() {
     //     let mut fairos = Client::new();
     //     let username = random_name();
     //     let password = random_password();
     //     let res = fairos.signup(&username, &password, None).await;
     //     assert!(res.is_ok());
-    //     let pod_name = random_name();
-    //     let res = fairos.create_pod(&username, &pod_name, &password).await;
+    //     let pod = random_name();
+    //     let res = fairos.create_pod(&username, &pod, &password).await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .doc_create_table(
+    //         .create_doc_database(
     //             &username,
-    //             &pod_name,
+    //             &pod,
     //             "table",
     //             vec![("s", FieldType::Str), ("n", FieldType::Number)],
     //             true,
     //         )
     //         .await;
     //     assert!(res.is_ok());
-    //     let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+    //     let res = fairos.open_doc_database(&username, &pod, "table").await;
     //     assert!(res.is_ok());
     //     fs::write("data.json", "[{\"s\": \"text\", \"n\": 12}, {\"s\": \"text\", \"n\": 10}]").unwrap();
-    //     let res = fairos.doc_load_json_file(&username, &pod_name, "table", "data.json").await;
+    //     let res = fairos.load_json_file(&username, &pod, "table", "data.json").await;
     //     assert!(res.is_ok());
     //     fs::remove_file("data.json").unwrap();
-    //     let res = fairos.doc_count_documents(&username, &pod_name, "table", None).await;
+    //     let res = fairos.count_documents(&username, &pod, "table", None).await;
     //     assert!(res.is_ok());
     //     assert_eq!(res.unwrap(), 2);
     // }
 
     // #[tokio::test]
-    // async fn test_doc_index_json_succeeds() {
+    // async fn test_index_json_succeeds() {
     //     let mut fairos = Client::new();
     //     let username = random_name();
     //     let password = random_password();
     //     let res = fairos.signup(&username, &password, None).await;
     //     assert!(res.is_ok());
-    //     let pod_name = random_name();
-    //     let res = fairos.create_pod(&username, &pod_name, &password).await;
+    //     let pod = random_name();
+    //     let res = fairos.create_pod(&username, &pod, &password).await;
     //     assert!(res.is_ok());
     //     let res = fairos
-    //         .doc_create_table(
+    //         .create_doc_database(
     //             &username,
-    //             &pod_name,
+    //             &pod,
     //             "table",
     //             vec![("s", FieldType::Str), ("n", FieldType::Number)],
     //             true,
     //         )
     //         .await;
     //     assert!(res.is_ok());
-    //     let res = fairos.doc_open_table(&username, &pod_name, "table").await;
+    //     let res = fairos.open_doc_database(&username, &pod, "table").await;
     //     assert!(res.is_ok());
-    //     let res = fairos.doc_index_json(&username, &pod_name, "table", "table.json").await;
+    //     let res = fairos.index_json(&username, &pod, "table", "table.json").await;
     //     assert!(res.is_ok());
     // }
 }

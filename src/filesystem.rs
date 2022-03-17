@@ -136,7 +136,7 @@ pub struct FileEntry {
 
 #[derive(Debug)]
 pub struct DirInfo {
-    pub pod_name: String,
+    pub pod: String,
     pub path: String,
     pub name: String,
     pub creation_time: u64,
@@ -162,7 +162,7 @@ pub struct FileBlock {
 
 #[derive(Debug)]
 pub struct FileInfo {
-    pub pod_name: String,
+    pub pod: String,
     pub path: String,
     pub name: String,
     pub content_type: Option<String>,
@@ -177,7 +177,7 @@ pub struct FileInfo {
 
 #[derive(Debug)]
 pub struct SharedFileInfo {
-    pub pod_name: String,
+    pub pod: String,
     pub name: String,
     pub content_type: Option<String>,
     pub size: u32,
@@ -190,14 +190,9 @@ pub struct SharedFileInfo {
 }
 
 impl Client {
-    pub async fn mkdir(
-        &self,
-        username: &str,
-        pod_name: &str,
-        path: &str,
-    ) -> Result<(), FairOSError> {
+    pub async fn mkdir(&self, username: &str, pod: &str, path: &str) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "dir_path": path,
         })
         .to_string()
@@ -214,14 +209,9 @@ impl Client {
         Ok(())
     }
 
-    pub async fn rmdir(
-        &self,
-        username: &str,
-        pod_name: &str,
-        path: &str,
-    ) -> Result<(), FairOSError> {
+    pub async fn rmdir(&self, username: &str, pod: &str, path: &str) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "dir_path": path,
         })
         .to_string()
@@ -243,11 +233,11 @@ impl Client {
     pub async fn ls(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         path: &str,
     ) -> Result<(Vec<DirEntry>, Vec<FileEntry>), FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         query.insert("dir_path", path);
         let cookie = self.cookie(username).unwrap();
         let res: DirListResponse =
@@ -293,11 +283,11 @@ impl Client {
     pub async fn dir_exists(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         path: &str,
     ) -> Result<bool, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         query.insert("dir_path", path);
         let cookie = self.cookie(username).unwrap();
         let res: DirPresentResponse = self
@@ -313,11 +303,11 @@ impl Client {
     pub async fn dir_info(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         path: &str,
     ) -> Result<DirInfo, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         query.insert("dir_path", path);
         let cookie = self.cookie(username).unwrap();
         let res: DirStatResponse =
@@ -330,7 +320,7 @@ impl Client {
                     }
                 })?;
         Ok(DirInfo {
-            pod_name: res.pod_name,
+            pod: res.pod_name,
             path: res.dir_path,
             name: res.dir_name,
             creation_time: res.creation_time.parse().unwrap(),
@@ -344,7 +334,7 @@ impl Client {
     pub async fn upload_buffer<R: Read>(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         dir: &str,
         file_name: &str,
         buffer: R,
@@ -353,7 +343,7 @@ impl Client {
         compression: Option<Compression>,
     ) -> Result<String, FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
+        multipart.add_text("pod_name", pod);
         multipart.add_text("dir_path", dir);
         multipart.add_text("block_size", block_size);
         multipart.add_stream("files", buffer, Some(file_name), Some(mime));
@@ -383,14 +373,14 @@ impl Client {
     pub async fn upload_file<P: AsRef<Path>>(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         dir: &str,
         local_path: P,
         block_size: &str,
         compression: Option<Compression>,
     ) -> Result<String, FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
+        multipart.add_text("pod_name", pod);
         multipart.add_text("dir_path", dir);
         multipart.add_text("block_size", block_size);
         multipart.add_file("files", local_path.as_ref());
@@ -420,11 +410,11 @@ impl Client {
     pub async fn download_buffer(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         path: &str,
     ) -> Result<Bytes, FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
+        multipart.add_text("pod_name", pod);
         multipart.add_text("file_path", path);
         let mut prepared = multipart.prepare().unwrap();
         let boundary = prepared.boundary().to_string();
@@ -445,12 +435,12 @@ impl Client {
     pub async fn download_file<P: AsRef<Path>>(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         path: &str,
         local_path: P,
     ) -> Result<(), FairOSError> {
         let mut multipart = Multipart::new();
-        multipart.add_text("pod_name", pod_name);
+        multipart.add_text("pod_name", pod);
         multipart.add_text("file_path", path);
         let mut prepared = multipart.prepare().unwrap();
         let boundary = prepared.boundary().to_string();
@@ -473,12 +463,12 @@ impl Client {
     pub async fn share_file(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         path: &str,
         receiver: &str,
     ) -> Result<String, FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "file_path": path,
             "dest_user": receiver,
         })
@@ -496,9 +486,9 @@ impl Client {
         Ok(res.file_sharing_reference)
     }
 
-    pub async fn rm(&self, username: &str, pod_name: &str, path: &str) -> Result<(), FairOSError> {
+    pub async fn rm(&self, username: &str, pod: &str, path: &str) -> Result<(), FairOSError> {
         let data = json!({
-            "pod_name": pod_name,
+            "pod_name": pod,
             "file_path": path,
         })
         .to_string()
@@ -520,11 +510,11 @@ impl Client {
     pub async fn file_info(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         path: &str,
     ) -> Result<FileInfo, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         query.insert("file_path", path);
         let cookie = self.cookie(username).unwrap();
         let res: FileStatResponse =
@@ -560,7 +550,7 @@ impl Client {
             None => Vec::new(),
         };
         Ok(FileInfo {
-            pod_name: res.pod_name,
+            pod: res.pod_name,
             path: res.file_path,
             name: res.file_name,
             content_type,
@@ -577,12 +567,12 @@ impl Client {
     pub async fn receive_shared_file(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         reference: &str,
         dir: &str,
     ) -> Result<String, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         query.insert("sharing_ref", reference);
         query.insert("dir_path", dir);
         let cookie = self.cookie(username).unwrap();
@@ -599,11 +589,11 @@ impl Client {
     pub async fn shared_file_info(
         &self,
         username: &str,
-        pod_name: &str,
+        pod: &str,
         reference: &str,
     ) -> Result<SharedFileInfo, FairOSError> {
         let mut query = HashMap::new();
-        query.insert("pod_name", pod_name);
+        query.insert("pod_name", pod);
         query.insert("sharing_ref", reference);
         let cookie = self.cookie(username).unwrap();
         let res: FileReceiveInfoResponse = self
@@ -625,7 +615,7 @@ impl Client {
             _ => unreachable!(),
         };
         Ok(SharedFileInfo {
-            pod_name: res.pod_name,
+            pod: res.pod_name,
             name: res.name,
             content_type,
             size: res.size.parse().unwrap(),
@@ -672,10 +662,10 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
     }
 
@@ -686,14 +676,14 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
-        let res = fairos.rmdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.rmdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
-        let res = fairos.dir_exists(&username, &pod_name, "/Documents").await;
+        let res = fairos.dir_exists(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), false);
     }
@@ -705,19 +695,19 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Music").await;
+        let res = fairos.mkdir(&username, &pod, "/Music").await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Videos").await;
+        let res = fairos.mkdir(&username, &pod, "/Videos").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username,
-                &pod_name,
+                &pod,
                 "/",
                 "todo.txt",
                 "go to the store".as_bytes(),
@@ -727,7 +717,7 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.ls(&username, &pod_name, "/").await;
+        let res = fairos.ls(&username, &pod, "/").await;
         assert!(res.is_ok());
         let (dirs, files) = res.unwrap();
         assert_eq!(
@@ -752,15 +742,15 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
-        let res = fairos.dir_exists(&username, &pod_name, "/Documents").await;
+        let res = fairos.dir_exists(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), true);
-        let res = fairos.dir_exists(&username, &pod_name, "/Music").await;
+        let res = fairos.dir_exists(&username, &pod, "/Music").await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), false);
     }
@@ -772,17 +762,17 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents/Text").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents/Text").await;
         assert!(res.is_ok());
-        let res = fairos.dir_info(&username, &pod_name, "/Documents").await;
+        let res = fairos.dir_info(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         let info = res.unwrap();
-        assert_eq!(info.pod_name, pod_name);
+        assert_eq!(info.pod, pod);
         assert_eq!(info.path, "/");
         assert_eq!(info.name, "Documents");
         assert_eq!(info.no_of_dirs, 1);
@@ -796,15 +786,15 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -824,16 +814,16 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         fs::write("upload.txt", "hello world").unwrap();
         let res = fairos
             .upload_file(
                 &username,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "upload.txt",
                 "1K",
@@ -852,15 +842,15 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -871,7 +861,7 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .download_buffer(&username, &pod_name, "/Documents/hello.txt")
+            .download_buffer(&username, &pod, "/Documents/hello.txt")
             .await;
         assert!(res.is_ok());
         let mut buf = res.unwrap();
@@ -887,15 +877,15 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -906,7 +896,7 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .download_file(&username, &pod_name, "/Documents/hello.txt", "download.txt")
+            .download_file(&username, &pod, "/Documents/hello.txt", "download.txt")
             .await;
         assert!(res.is_ok());
         assert_eq!(fs::read("download.txt").unwrap(), b"hello world");
@@ -925,15 +915,15 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let (receiver, _) = res.unwrap();
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -944,7 +934,7 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .share_file(&username, &pod_name, "/Documents/hello.txt", &receiver)
+            .share_file(&username, &pod, "/Documents/hello.txt", &receiver)
             .await;
         assert!(res.is_ok());
     }
@@ -956,15 +946,15 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -974,9 +964,7 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos
-            .rm(&username, &pod_name, "/Documents/hello.txt")
-            .await;
+        let res = fairos.rm(&username, &pod, "/Documents/hello.txt").await;
         assert!(res.is_ok());
     }
 
@@ -987,15 +975,15 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username, &password, None).await;
         assert!(res.is_ok());
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username, &pod_name, &password).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username, &pod, &password).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username, &pod, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -1006,11 +994,11 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .file_info(&username, &pod_name, "/Documents/hello.txt")
+            .file_info(&username, &pod, "/Documents/hello.txt")
             .await;
         assert!(res.is_ok());
         let info = res.unwrap();
-        assert_eq!(info.pod_name, pod_name);
+        assert_eq!(info.pod, pod);
         assert_eq!(info.path, "/Documents");
         assert_eq!(info.name, "hello.txt");
         assert_eq!(info.content_type, None);
@@ -1033,15 +1021,15 @@ mod tests {
         let res = fairos.signup(&username2, &password2, None).await;
         assert!(res.is_ok());
         let (receiver, _) = res.unwrap();
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username1, &pod_name, &password1).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username1, &pod, &password1).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username1, &pod_name, "/Documents").await;
+        let res = fairos.mkdir(&username1, &pod, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username1,
-                &pod_name,
+                &pod,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -1052,18 +1040,18 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .share_file(&username1, &pod_name, "/Documents/hello.txt", &receiver)
+            .share_file(&username1, &pod, "/Documents/hello.txt", &receiver)
             .await;
         assert!(res.is_ok());
         let reference = res.unwrap();
 
-        let pod_name = random_name();
-        let res = fairos.create_pod(&username2, &pod_name, &password2).await;
+        let pod = random_name();
+        let res = fairos.create_pod(&username2, &pod, &password2).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username2, &pod_name, "/Shared").await;
+        let res = fairos.mkdir(&username2, &pod, "/Shared").await;
         assert!(res.is_ok());
         let res = fairos
-            .receive_shared_file(&username2, &pod_name, &reference, "/Shared")
+            .receive_shared_file(&username2, &pod, &reference, "/Shared")
             .await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), "/Shared/hello.txt");
@@ -1083,15 +1071,15 @@ mod tests {
         let res = fairos.signup(&username2, &password2, None).await;
         assert!(res.is_ok());
         let (receiver, _) = res.unwrap();
-        let pod_name1 = random_name();
-        let res = fairos.create_pod(&username1, &pod_name1, &password1).await;
+        let pod1 = random_name();
+        let res = fairos.create_pod(&username1, &pod1, &password1).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username1, &pod_name1, "/Documents").await;
+        let res = fairos.mkdir(&username1, &pod1, "/Documents").await;
         assert!(res.is_ok());
         let res = fairos
             .upload_buffer(
                 &username1,
-                &pod_name1,
+                &pod1,
                 "/Documents",
                 "hello.txt",
                 "hello world".as_bytes(),
@@ -1102,26 +1090,24 @@ mod tests {
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .share_file(&username1, &pod_name1, "/Documents/hello.txt", &receiver)
+            .share_file(&username1, &pod1, "/Documents/hello.txt", &receiver)
             .await;
         assert!(res.is_ok());
         let reference = res.unwrap();
 
-        let pod_name2 = random_name();
-        let res = fairos.create_pod(&username2, &pod_name2, &password2).await;
+        let pod2 = random_name();
+        let res = fairos.create_pod(&username2, &pod2, &password2).await;
         assert!(res.is_ok());
-        let res = fairos.mkdir(&username2, &pod_name2, "/Shared").await;
-        assert!(res.is_ok());
-        let res = fairos
-            .receive_shared_file(&username2, &pod_name2, &reference, "/Shared")
-            .await;
+        let res = fairos.mkdir(&username2, &pod2, "/Shared").await;
         assert!(res.is_ok());
         let res = fairos
-            .shared_file_info(&username2, &pod_name2, &reference)
+            .receive_shared_file(&username2, &pod2, &reference, "/Shared")
             .await;
+        assert!(res.is_ok());
+        let res = fairos.shared_file_info(&username2, &pod2, &reference).await;
         assert!(res.is_ok());
         let info = res.unwrap();
-        assert_eq!(info.pod_name, pod_name1);
+        assert_eq!(info.pod, pod1);
         assert_eq!(info.name, "hello.txt");
         assert_eq!(info.content_type, None);
         assert_eq!(info.size, "hello world".as_bytes().len() as u32);
