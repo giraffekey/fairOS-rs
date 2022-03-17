@@ -4,7 +4,7 @@ use crate::{
     Client,
 };
 
-use std::{collections::HashMap, fs, io::Read, path::Path};
+use std::{collections::HashMap, fs, io::Read, path::Path, str::FromStr};
 
 use bytes::Bytes;
 use mime::Mime;
@@ -128,7 +128,7 @@ pub struct FileEntry {
     pub name: String,
     pub content_type: String,
     pub size: u32,
-    pub block_size: u32,
+    pub block_size: BlockSize,
     pub creation_time: u64,
     pub modification_time: u64,
     pub access_time: u64,
@@ -167,7 +167,7 @@ pub struct FileInfo {
     pub name: String,
     pub content_type: Option<String>,
     pub size: u32,
-    pub block_size: u32,
+    pub block_size: BlockSize,
     pub compression: Option<Compression>,
     pub creation_time: u64,
     pub modification_time: u64,
@@ -181,12 +181,100 @@ pub struct SharedFileInfo {
     pub name: String,
     pub content_type: Option<String>,
     pub size: u32,
-    pub block_size: u32,
+    pub block_size: BlockSize,
     pub no_of_blocks: u32,
     pub compression: Option<Compression>,
     pub sender: String,
     pub receiver: String,
     pub shared_time: u64,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum BlockSize {
+    Bytes(u32),
+    Kilobytes(u32),
+    Megabytes(u32),
+    Gigabytes(u32),
+    Terabytes(u32),
+}
+
+impl BlockSize {
+    fn conversion(&self, divisor: u64) -> u32 {
+        let bytes = match self {
+            BlockSize::Bytes(n) => *n as u64,
+            BlockSize::Kilobytes(n) => *n as u64 * 1_000,
+            BlockSize::Megabytes(n) => *n as u64 * 1_000_000,
+            BlockSize::Gigabytes(n) => *n as u64 * 1_000_000_000,
+            BlockSize::Terabytes(n) => *n as u64 * 1_000_000_000_000,
+        };
+        (bytes / divisor) as u32
+    }
+
+    pub fn to_bytes(&self) -> Self {
+        BlockSize::Bytes(self.conversion(1))
+    }
+
+    pub fn to_kilobytes(&self) -> Self {
+        BlockSize::Kilobytes(self.conversion(1_000))
+    }
+
+    pub fn to_megabytes(&self) -> Self {
+        BlockSize::Megabytes(self.conversion(1_000_000))
+    }
+
+    pub fn to_gigabytes(&self) -> Self {
+        BlockSize::Gigabytes(self.conversion(1_000_000_000))
+    }
+
+    pub fn to_terabytes(&self) -> Self {
+        BlockSize::Terabytes(self.conversion(1_000_000_000_000))
+    }
+}
+
+impl ToString for BlockSize {
+    fn to_string(&self) -> String {
+        match self {
+            BlockSize::Bytes(n) => format!("{}B", n),
+            BlockSize::Kilobytes(n) => format!("{}K", n),
+            BlockSize::Megabytes(n) => format!("{}M", n),
+            BlockSize::Gigabytes(n) => format!("{}G", n),
+            BlockSize::Terabytes(n) => format!("{}T", n),
+        }
+    }
+}
+
+impl FromStr for BlockSize {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut chars = s.chars().rev();
+        let unit = chars.next().unwrap();
+        let size = chars.rev().collect::<String>().parse().unwrap();
+        match unit {
+            'B' => Ok(BlockSize::Bytes(size)),
+            'K' => Ok(BlockSize::Kilobytes(size)),
+            'M' => Ok(BlockSize::Megabytes(size)),
+            'G' => Ok(BlockSize::Gigabytes(size)),
+            'T' => Ok(BlockSize::Terabytes(size)),
+            _ => Err(()),
+        }
+    }
+}
+
+impl From<u64> for BlockSize {
+    fn from(n: u64) -> Self {
+        if n >= 1_000_000_000_000 {
+            BlockSize::Terabytes((n / 1_000_000_000_000) as u32)
+        } else if n >= 1_000_000_000 {
+            BlockSize::Gigabytes((n / 1_000_000_000) as u32)
+        } else if n >= 1_000_000 {
+            BlockSize::Megabytes((n / 1_000_000) as u32)
+        } else if n >= 1_000 {
+            BlockSize::Kilobytes((n / 1_000) as u32)
+        } else {
+            BlockSize::Bytes(n as u32)
+        }
+    }
 }
 
 impl Client {
@@ -269,7 +357,7 @@ impl Client {
                     name: entry.name.clone(),
                     content_type: entry.content_type.clone(),
                     size: entry.size.parse().unwrap(),
-                    block_size: entry.size.parse().unwrap(),
+                    block_size: BlockSize::from(entry.block_size.parse::<u64>().unwrap()),
                     creation_time: entry.creation_time.parse().unwrap(),
                     modification_time: entry.modification_time.parse().unwrap(),
                     access_time: entry.access_time.parse().unwrap(),
@@ -339,13 +427,13 @@ impl Client {
         file_name: &str,
         buffer: R,
         mime: Mime,
-        block_size: &str,
+        block_size: BlockSize,
         compression: Option<Compression>,
     ) -> Result<String, FairOSError> {
         let mut multipart = Multipart::new();
         multipart.add_text("pod_name", pod);
         multipart.add_text("dir_path", dir);
-        multipart.add_text("block_size", block_size);
+        multipart.add_text("block_size", block_size.to_string());
         multipart.add_stream("files", buffer, Some(file_name), Some(mime));
         let mut prepared = multipart.prepare().unwrap();
         let boundary = prepared.boundary().to_string();
@@ -376,13 +464,13 @@ impl Client {
         pod: &str,
         dir: &str,
         local_path: P,
-        block_size: &str,
+        block_size: BlockSize,
         compression: Option<Compression>,
     ) -> Result<String, FairOSError> {
         let mut multipart = Multipart::new();
         multipart.add_text("pod_name", pod);
         multipart.add_text("dir_path", dir);
-        multipart.add_text("block_size", block_size);
+        multipart.add_text("block_size", block_size.to_string());
         multipart.add_file("files", local_path.as_ref());
         let mut prepared = multipart.prepare().unwrap();
         let boundary = prepared.boundary().to_string();
@@ -555,7 +643,7 @@ impl Client {
             name: res.file_name,
             content_type,
             size: res.file_size.parse().unwrap(),
-            block_size: res.block_size.parse().unwrap(),
+            block_size: BlockSize::from(res.block_size.parse::<u64>().unwrap()),
             compression,
             creation_time: res.creation_time.parse().unwrap(),
             modification_time: res.modification_time.parse().unwrap(),
@@ -619,7 +707,7 @@ impl Client {
             name: res.name,
             content_type,
             size: res.size.parse().unwrap(),
-            block_size: res.block_size.parse().unwrap(),
+            block_size: BlockSize::from(res.block_size.parse::<u64>().unwrap()),
             no_of_blocks: res.number_of_blocks.parse().unwrap(),
             compression,
             sender: res.source_address,
@@ -631,7 +719,7 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, Compression};
+    use super::{Client, BlockSize, Compression};
     use bytes::Buf;
     use rand::{
         distributions::{Alphanumeric, Uniform},
@@ -712,7 +800,7 @@ mod tests {
                 "todo.txt",
                 "go to the store".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1M",
+                BlockSize::Kilobytes(1),
                 Some(Compression::Gzip),
             )
             .await;
@@ -799,7 +887,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 Some(Compression::Gzip),
             )
             .await;
@@ -826,7 +914,7 @@ mod tests {
                 &pod,
                 "/Documents",
                 "upload.txt",
-                "1K",
+                BlockSize::Kilobytes(1),
                 Some(Compression::Snappy),
             )
             .await;
@@ -855,7 +943,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 None,
             )
             .await;
@@ -890,7 +978,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 None,
             )
             .await;
@@ -928,7 +1016,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 None,
             )
             .await;
@@ -959,7 +1047,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 None,
             )
             .await;
@@ -988,7 +1076,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 Some(Compression::Gzip),
             )
             .await;
@@ -1003,7 +1091,7 @@ mod tests {
         assert_eq!(info.name, "hello.txt");
         assert_eq!(info.content_type, None);
         assert_eq!(info.size, "hello world".as_bytes().len() as u32);
-        assert_eq!(info.block_size, 1_000);
+        assert_eq!(info.block_size, BlockSize::Kilobytes(1));
         assert_eq!(info.compression, Some(Compression::Gzip));
         assert_eq!(info.blocks.len(), 0);
     }
@@ -1034,7 +1122,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 None,
             )
             .await;
@@ -1084,7 +1172,7 @@ mod tests {
                 "hello.txt",
                 "hello world".as_bytes(),
                 mime::TEXT_PLAIN,
-                "1K",
+                BlockSize::Kilobytes(1),
                 None,
             )
             .await;
@@ -1111,7 +1199,7 @@ mod tests {
         assert_eq!(info.name, "hello.txt");
         assert_eq!(info.content_type, None);
         assert_eq!(info.size, "hello world".as_bytes().len() as u32);
-        assert_eq!(info.block_size, 1_000);
+        assert_eq!(info.block_size, BlockSize::Kilobytes(1));
         assert_eq!(info.no_of_blocks, 1);
         assert_eq!(info.compression, None);
         // assert_eq!(info.sender, sender);
