@@ -34,8 +34,8 @@ struct FileEntryResponse {
 
 #[derive(Debug, Deserialize)]
 struct DirListResponse {
-    dirs: Vec<DirEntryResponse>,
-    files: Vec<FileEntryResponse>,
+    dirs: Option<Vec<DirEntryResponse>>,
+    files: Option<Vec<FileEntryResponse>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -259,30 +259,34 @@ impl Client {
                         FairOSError::FileSystem(FairOSFileSystemError::Error)
                     }
                 })?;
-        let dirs = res
-            .dirs
-            .iter()
-            .map(|entry| DirEntry {
-                name: entry.name.clone(),
-                content_type: entry.content_type.clone(),
-                creation_time: entry.creation_time.parse().unwrap(),
-                modification_time: entry.modification_time.parse().unwrap(),
-                access_time: entry.access_time.parse().unwrap(),
-            })
-            .collect();
-        let files = res
-            .files
-            .iter()
-            .map(|entry| FileEntry {
-                name: entry.name.clone(),
-                content_type: entry.content_type.clone(),
-                size: entry.size.parse().unwrap(),
-                block_size: entry.size.parse().unwrap(),
-                creation_time: entry.creation_time.parse().unwrap(),
-                modification_time: entry.modification_time.parse().unwrap(),
-                access_time: entry.access_time.parse().unwrap(),
-            })
-            .collect();
+        let dirs = match res.dirs {
+            Some(dirs) => dirs
+                .iter()
+                .map(|entry| DirEntry {
+                    name: entry.name.clone(),
+                    content_type: entry.content_type.clone(),
+                    creation_time: entry.creation_time.parse().unwrap(),
+                    modification_time: entry.modification_time.parse().unwrap(),
+                    access_time: entry.access_time.parse().unwrap(),
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        let files = match res.files {
+            Some(files) => files
+                .iter()
+                .map(|entry| FileEntry {
+                    name: entry.name.clone(),
+                    content_type: entry.content_type.clone(),
+                    size: entry.size.parse().unwrap(),
+                    block_size: entry.size.parse().unwrap(),
+                    creation_time: entry.creation_time.parse().unwrap(),
+                    modification_time: entry.modification_time.parse().unwrap(),
+                    access_time: entry.access_time.parse().unwrap(),
+                })
+                .collect(),
+            None => Vec::new(),
+        };
         Ok((dirs, files))
     }
 
