@@ -150,7 +150,7 @@ fairos
         "cat-photos",
         "/Photos",
         "/home/user/Pictures/my-cute-cat.jpeg",
-        BlockSize::from_megabytes(2),
+        BlockSize::Megabytes(2),
         Some(Compression::Gzip),
     )
     .await
@@ -168,7 +168,7 @@ fairos
         "cat-names.txt",
         "Peanut Butter, Cleo, Oreo, Smokey".as_bytes(),
         mime::TEXT_PLAIN,
-        BlockSize::from_kilobytes(1),
+        BlockSize::Kilobytes(1),
         Some(Compression::Gzip),
     )
     .await
@@ -350,7 +350,7 @@ let cats: Vec<Cat> = fairos
         "username",
         "cat-data",
         "my-cats",
-        Expr::Eq("name", ExprValue::Str("Tabby")),
+        Expr::Eq("name", ExprValue::Str("Tabby".into())),
         Some(1)
     )
     .await
