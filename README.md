@@ -218,4 +218,154 @@ println!("{:?}", file_path); // "/Documents/images/my-cute-cat.jpeg"
 
 ### Key Value Store
 
+Create key value store:
+
+```rust
+fairos.open_pod("username", "cat-data", "password").await.unwrap();
+fairos.create_kv_store("username", "cat-data", "cat-breeds", IndexType::Str).await.unwrap();
+```
+
+Open key value store:
+
+```rust
+fairos.open_kv_store("username", "cat-data", "cat-breeds").await.unwrap();
+```
+
+Delete key value store:
+
+```rust
+fairos.delete_kv_store("username", "cat-data", "cat-breeds").await.unwrap();
+```
+
+List key value stores:
+
+```rust
+let stores = fairos.list_kv_stores("username", "cat-data").await.unwrap();
+println!("{:?}", stores);
+```
+
+Put key value pair in store:
+
+```rust
+#[derive(Debug, Deserialize, Serialize)]
+struct CatBreed<'a> {
+	pub weight: (u32, u32),
+	pub coat_colors: &'a [&'a str],
+	pub life_expectancy: (u32, u32),
+}
+
+let siamese_facts = CatBreed {
+	weight: (5, 12),
+	coat_colors: &["Chocolate", "Seal", "Lilac", "Blue", "Red", "Cream", "Fawn", "Cinnamon"],
+	life_expectancy: (8, 12),
+};
+fairos.put_kv_pair("username", "cat-data", "cat-breeds", "Siamese", siamese_facts).await.unwrap();
+```
+
+Get key value pair from store:
+
+```rust
+let facts: CatBreed = fairos.get_kv_pair("username", "cat-data", "cat-breeds", "Siamese").await.unwrap();
+```
+
+Delete key value pair from store:
+
+```rust
+fairos.delete_kv_pair("username", "cat-data", "cat-breeds", "Siamese").await.unwrap();
+```
+
+Count key value pairs in store:
+
+```rust
+let count = fairos.count_kv_pairs("username", "cat-data", "cat-breeds").await.unwrap();
+println!("{:?}", count);
+```
+
 ### Document DB
+
+Create document database:
+
+```rust
+fairos.open_pod("username", "cat-data", "password").await.unwrap();
+fairos
+    .create_doc_database(
+    	"username",
+    	"cat-data",
+    	"my-cats",
+    	&[("name", FieldType::Str), ("age", FieldType::Number), ("breed", FieldType::Str)],
+        true,
+    )
+    .await
+    .unwrap();
+```
+
+Open document database:
+
+```rust
+fairos.open_doc_database("username", "cat-data", "my-cats").await.unwrap();
+```
+
+Delete document database:
+
+```rust
+fairos.delete_doc_database("username", "cat-data", "my-cats").await.unwrap();
+```
+
+List document databases:
+
+```rust
+let databases = fairos.list_doc_databases("username", "cat-data").await.unwrap();
+println!("{:?}", databases);
+```
+
+Put document in database:
+
+```rust
+#[derive(Debug)]
+struct Cat<'a> {
+	pub name: &'a str,
+	pub age: u32,
+	pub breed: &'a str,
+}
+
+let cat = Cat {
+	name: "Bandit",
+	age: 7,
+	breed: "Tabby",
+};
+let id = fairos.put_document("username", "cat-data", "my-cats", cat).await.unwrap();
+```
+
+Get document in database:
+
+```rust
+let cat: Cat = fairos.get_document("username", "cat-data", "my-cats", &id).await.unwrap();
+```
+
+Find documents in database:
+
+```rust
+let cats: Vec<Cat> = fairos
+	.find_documents(
+		"username",
+		"cat-data",
+		"my-cats",
+		Expr::Eq("name", ExprValue::Str("Tabby")),
+		Some(1)
+	)
+	.await
+	.unwrap();
+```
+
+Delete document in database:
+
+```rust
+fairos.delete_document("username", "cat-data", "my-cats", &id).await.unwrap();
+```
+
+Count documents in database:
+
+```rust
+let count = fairos.count_documents("username", "cat-data", "my-cats", Expr::All).await.unwrap();
+println!("{:?}", count);
+```
