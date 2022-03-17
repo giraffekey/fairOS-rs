@@ -321,7 +321,7 @@ println!("{:?}", databases);
 Put document in database:
 
 ```rust
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 struct Cat<'a> {
 	pub name: &'a str,
 	pub age: u32,
