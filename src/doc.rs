@@ -52,13 +52,57 @@ pub struct DocumentDatabase {
     fields: Vec<(String, FieldType)>,
 }
 
+#[derive(Debug)]
+pub enum ExprValue {
+    Str(String),
+    Number(u32),
+    Map,
+}
+
+impl ToString for ExprValue {
+    fn to_string(&self) -> String {
+        match self {
+            ExprValue::Str(s) => format!("%22{}%22", s),
+            ExprValue::Number(n) => n.to_string(),
+            ExprValue::Map => unimplemented!(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Expr {
+    All,
+    Eq(String, ExprValue),
+    Gt(String, ExprValue),
+    Gte(String, ExprValue),
+    Lt(String, ExprValue),
+    Lte(String, ExprValue),
+    And(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
+}
+
+impl ToString for Expr {
+    fn to_string(&self) -> String {
+        match self {
+            Expr::All => "".into(),
+            Expr::Eq(field, value) => format!("{}={}", field, value.to_string()),
+            Expr::Gt(field, value) => format!("{}%3e{}", field, value.to_string()),
+            Expr::Gte(field, value) => format!("{}%3e={}", field, value.to_string()),
+            Expr::Lt(field, value) => format!("{}%3e{}", value.to_string(), field),
+            Expr::Lte(field, value) => format!("{}%3e={}", value.to_string(), field),
+            Expr::And(a, b) => unimplemented!(),
+            Expr::Or(a, b) => unimplemented!(),
+        }
+    }
+}
+
 impl Client {
     pub async fn create_doc_database(
         &self,
         username: &str,
         pod: &str,
         name: &str,
-        fields: Vec<(&str, FieldType)>,
+        fields: &[(&str, FieldType)],
         mutable: bool,
     ) -> Result<(), FairOSError> {
         let si = fields
@@ -245,13 +289,14 @@ impl Client {
         username: &str,
         pod: &str,
         database: &str,
-        expression: &str,
+        expr: Expr,
         limit: Option<u32>,
     ) -> Result<Vec<T>, FairOSError> {
         let mut query = HashMap::new();
         query.insert("pod_name", pod);
         query.insert("table_name", database);
-        query.insert("expr", expression);
+        let expr_str = expr.to_string();
+        query.insert("expr", expr_str.as_str());
         let limit = limit.map(|limit| limit.to_string()).unwrap_or("".into());
         if !limit.is_empty() {
             query.insert("limit", limit.as_str());
@@ -303,12 +348,12 @@ impl Client {
         username: &str,
         pod: &str,
         database: &str,
-        expression: Option<&str>,
+        expr: Expr,
     ) -> Result<u32, FairOSError> {
         let data = json!({
             "pod_name": pod,
             "table_name": database,
-            "expr": expression,
+            "expr": expr.to_string(),
         })
         .to_string()
         .as_bytes()
@@ -412,7 +457,7 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{Client, DocumentDatabase, FieldType};
+    use super::{Client, DocumentDatabase, Expr, ExprValue, FieldType};
     use futures::StreamExt;
     use rand::{
         distributions::{Alphanumeric, Uniform},
@@ -458,7 +503,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -480,7 +525,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -504,7 +549,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -528,13 +573,13 @@ mod tests {
                 &username,
                 &pod,
                 "table1",
-                vec![("s1", FieldType::Str), ("n2", FieldType::Number)],
+                &[("s1", FieldType::Str), ("n2", FieldType::Number)],
                 true,
             )
             .await;
         assert!(res.is_ok());
         let res = fairos
-            .create_doc_database(&username, &pod, "table2", vec![("m", FieldType::Map)], true)
+            .create_doc_database(&username, &pod, "table2", &[("m", FieldType::Map)], true)
             .await;
         assert!(res.is_ok());
         let res = fairos
@@ -542,7 +587,7 @@ mod tests {
                 &username,
                 &pod,
                 "table3",
-                vec![("s2", FieldType::Str), ("n1", FieldType::Number)],
+                &[("s2", FieldType::Str), ("n1", FieldType::Number)],
                 true,
             )
             .await;
@@ -591,7 +636,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -627,7 +672,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -675,7 +720,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -720,7 +765,7 @@ mod tests {
         assert!(res.is_ok());
         let id = res.unwrap();
         let res = fairos
-            .find_documents::<TestData>(&username, &pod, "table", "n%3e9", None)
+            .find_documents::<TestData>(&username, &pod, "table", Expr::Gt("n".into(), ExprValue::Number(9)), None)
             .await;
         assert!(res.is_ok());
         assert_eq!(
@@ -737,7 +782,7 @@ mod tests {
             ]
         );
         let res = fairos
-            .find_documents::<TestData>(&username, &pod, "table", "s=%22a%22", None)
+            .find_documents::<TestData>(&username, &pod, "table", Expr::Eq("s".into(), ExprValue::Str("a".into())), None)
             .await;
         assert!(res.is_ok());
         assert_eq!(
@@ -770,7 +815,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -813,7 +858,7 @@ mod tests {
                 &username,
                 &pod,
                 "table",
-                vec![("s", FieldType::Str), ("n", FieldType::Number)],
+                &[("s", FieldType::Str), ("n", FieldType::Number)],
                 true,
             )
             .await;
@@ -844,13 +889,13 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let res = fairos.count_documents(&username, &pod, "table", None).await;
+        let res = fairos.count_documents(&username, &pod, "table", Expr::All).await;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), 2);
     }
 
     // #[tokio::test]
-    // async fn test_doc_load_json_buffer_succeeds() {
+    // async fn test_load_json_buffer_succeeds() {
     //     let mut fairos = Client::new();
     //     let username = random_name();
     //     let password = random_password();
@@ -864,14 +909,14 @@ mod tests {
     //             &username,
     //             &pod,
     //             "table",
-    //             vec![("s", FieldType::Str), ("n", FieldType::Number)],
+    //             &[("s", FieldType::Str), ("n", FieldType::Number)],
     //             true,
     //         )
     //         .await;
     //     assert!(res.is_ok());
     //     let res = fairos.open_doc_database(&username, &pod, "table").await;
     //     assert!(res.is_ok());
-    //     let res = fairos.doc_load_json_buffer(&username, &pod, "table", "[{\"s\": \"text\", \"n\": 12}, {\"s\": \"text\", \"n\": 10}]".as_bytes()).await;
+    //     let res = fairos.load_json_buffer(&username, &pod, "table", "[{\"s\": \"text\", \"n\": 12}, {\"s\": \"text\", \"n\": 10}]".as_bytes()).await;
     //     assert!(res.is_ok());
     //     let res = fairos.count_documents(&username, &pod, "table", None).await;
     //     assert!(res.is_ok());
@@ -893,7 +938,7 @@ mod tests {
     //             &username,
     //             &pod,
     //             "table",
-    //             vec![("s", FieldType::Str), ("n", FieldType::Number)],
+    //             &[("s", FieldType::Str), ("n", FieldType::Number)],
     //             true,
     //         )
     //         .await;
@@ -924,7 +969,7 @@ mod tests {
     //             &username,
     //             &pod,
     //             "table",
-    //             vec![("s", FieldType::Str), ("n", FieldType::Number)],
+    //             &[("s", FieldType::Str), ("n", FieldType::Number)],
     //             true,
     //         )
     //         .await;
