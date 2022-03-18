@@ -126,6 +126,7 @@ impl Client {
             Ok(serde_json::from_slice(&buf).unwrap())
         } else {
             let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            log::error!("{}", res.message);
             Err(RequestError::Message(res.message))
         }
     }
@@ -175,6 +176,7 @@ impl Client {
             Ok((des, cookie))
         } else {
             let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            log::error!("{}", res.message);
             Err(RequestError::Message(res.message))
         }
     }
@@ -205,6 +207,7 @@ impl Client {
             Ok(serde_json::from_slice(&buf).unwrap())
         } else {
             let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            log::error!("{}", res.message);
             Err(RequestError::Message(res.message))
         }
     }
@@ -244,6 +247,7 @@ impl Client {
             Ok(serde_json::from_slice(&buf).unwrap())
         } else {
             let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            log::error!("{}", res.message);
             Err(RequestError::Message(res.message))
         }
     }
@@ -278,6 +282,7 @@ impl Client {
             Ok(buf)
         } else {
             let res: MessageResponse = serde_json::from_slice(&buf).unwrap();
+            log::error!("{}", res.message);
             Err(RequestError::Message(res.message))
         }
     }

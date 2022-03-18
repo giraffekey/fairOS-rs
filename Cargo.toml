@@ -12,6 +12,7 @@ bytes = "1.1"
 futures = "0.3"
 hyper = { version = "0.14", features = ["client", "http1", "http2"] }
 hyper-tls = "0.5"
+log = "0.4"
 mime = "0.3"
 multipart = { version = "0.18", features = ["client", "hyper"] }
 rand = "0.8"
