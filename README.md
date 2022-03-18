@@ -1,6 +1,6 @@
 # fairOS-rs
 
-Rust library for interaction with the FairOS API.
+Rust crate for interaction with the [FairOS API](https://docs.fairos.fairdatasociety.org/docs/).
 
 ## Usage
 
