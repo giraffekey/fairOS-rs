@@ -24,7 +24,8 @@ struct KvCountResponse {
 struct KvListTableResponse {
     table_name: String,
     indexes: Vec<String>,
-    r#type: String,
+    #[serde(rename = "type")]
+    _type: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -387,7 +388,7 @@ impl Client {
         Ok(())
     }
 
-    pub(crate) async fn kv_seek(
+    pub(crate) async fn _kv_seek(
         &self,
         username: &str,
         pod: &str,
@@ -427,7 +428,6 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{Client, IndexType, KeyValueStore};
-    use futures::StreamExt;
     use rand::{
         distributions::{Alphanumeric, Uniform},
         thread_rng, Rng,

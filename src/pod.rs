@@ -470,7 +470,7 @@ mod tests {
         let password = random_password();
         let res = fairos.signup(&username1, &password, None).await;
         assert!(res.is_ok());
-        let (address, _) = res.unwrap();
+        let (_address, _) = res.unwrap();
         let pod_name = random_name();
         let res = fairos.create_pod(&username1, &pod_name, &password).await;
         assert!(res.is_ok());

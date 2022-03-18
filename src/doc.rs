@@ -90,8 +90,8 @@ impl ToString for Expr {
             Expr::Gte(field, value) => format!("{}%3e={}", field, value.to_string()),
             Expr::Lt(field, value) => format!("{}%3e{}", value.to_string(), field),
             Expr::Lte(field, value) => format!("{}%3e={}", value.to_string(), field),
-            Expr::And(a, b) => unimplemented!(),
-            Expr::Or(a, b) => unimplemented!(),
+            Expr::And(_a, _b) => unimplemented!(),
+            Expr::Or(_a, _b) => unimplemented!(),
         }
     }
 }
@@ -458,13 +458,11 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{Client, DocumentDatabase, Expr, ExprValue, FieldType};
-    use futures::StreamExt;
     use rand::{
         distributions::{Alphanumeric, Uniform},
         thread_rng, Rng,
     };
     use serde::{Deserialize, Serialize};
-    use std::fs;
 
     #[derive(Debug, PartialEq, Deserialize, Serialize)]
     struct TestData {
@@ -763,7 +761,6 @@ mod tests {
             )
             .await;
         assert!(res.is_ok());
-        let id = res.unwrap();
         let res = fairos
             .find_documents::<TestData>(&username, &pod, "table", Expr::Gt("n".into(), ExprValue::Number(9)), None)
             .await;

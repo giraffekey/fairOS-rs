@@ -1,5 +1,3 @@
-use crate::error::FairOSError;
-
 use core::{str::FromStr, time::Duration};
 use std::collections::HashMap;
 
@@ -21,7 +19,8 @@ pub(crate) enum RequestError {
 #[derive(Debug, Deserialize)]
 pub(crate) struct MessageResponse {
     pub message: String,
-    pub code: u32,
+    #[serde(rename = "code")]
+    pub _code: u32,
 }
 
 fn is_status_ok(status: StatusCode) -> bool {

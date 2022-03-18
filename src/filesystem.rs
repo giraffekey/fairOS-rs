@@ -10,7 +10,7 @@ use bytes::Bytes;
 use mime::Mime;
 use multipart::client::lazy::Multipart;
 use serde::Deserialize;
-use serde_json::{json, Value as JsonValue};
+use serde_json::json;
 
 #[derive(Debug, Deserialize)]
 struct DirEntryResponse {
@@ -287,7 +287,7 @@ impl Client {
         .as_bytes()
         .to_vec();
         let cookie = self.cookie(username).unwrap();
-        let (res, _) = self
+        let _ = self
             .post::<MessageResponse>("/dir/mkdir", data, Some(cookie))
             .await
             .map_err(|err| match err {
@@ -306,7 +306,7 @@ impl Client {
         .as_bytes()
         .to_vec();
         let cookie = self.cookie(username).unwrap();
-        let res: MessageResponse =
+        let _: MessageResponse =
             self.delete("/dir/rmdir", data, cookie)
                 .await
                 .map_err(|err| match err {
@@ -1153,7 +1153,7 @@ mod tests {
         let password1 = random_password();
         let res = fairos.signup(&username1, &password1, None).await;
         assert!(res.is_ok());
-        let (sender, _) = res.unwrap();
+        let (_sender, _) = res.unwrap();
         let username2 = random_name();
         let password2 = random_password();
         let res = fairos.signup(&username2, &password2, None).await;
