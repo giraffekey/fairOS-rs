@@ -2,8 +2,6 @@
 
 Rust crate for interaction with the [FairOS API](https://docs.fairos.fairdatasociety.org/docs/).
 
-[Demo video](https://youtu.be/_3t5k9Q8Upw)
-
 ## Usage
 
 - [User](#user)
